@@ -1,8 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=WDXL+Lubrifont+TC:wght@400;700&display=swap');
+
+* {
+  font-family: 'WDXL Lubrifont TC', monospace;
+}
+
+body, html {
+  overflow: hidden;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
 #root {
   max-width: 1280px;
   margin: 0 auto;
   padding: 2rem;
   text-align: center;
+}
+
+.futuristic-font {
+  font-family: 'WDXL Lubrifont TC', monospace;
 }
 
 .logo {

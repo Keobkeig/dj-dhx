@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import './App.css'
 import PulsatingButton from '@/components/ui/pulsating-button'
 import VinylRecord from '@/components/VinylRecord'
+import { SongProgress } from '@/components/SongProgress'
+import { Upload, Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
 
 type PadType = 'drums' | 'bass' | 'melodic' | 'fx' | 'vocal' | 'perc' | 'stop' | 'mute'
 
@@ -24,14 +26,21 @@ interface Track {
   artist: string
   playing: boolean
   position: 'left' | 'right'
+  audioFile?: string
+  duration?: number
+  currentTime?: number
+  bpm?: number
 }
 
 function App() {
   const [pads, setPads] = useState<Pad[]>([])
   const [tracks, setTracks] = useState<Track[]>([
-    { id: '1', title: 'Uptown Funk', artist: 'Bruno Mars', playing: true, position: 'left' },
-    { id: '2', title: 'Good 4 U', artist: 'Olivia Rodrigo', playing: false, position: 'right' }
+    { id: '1', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'left', bpm: 120 },
+    { id: '2', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'right', bpm: 120 }
   ])
+  const [loadedTracks, setLoadedTracks] = useState<Track[]>([])
+  const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0)
+  const [songProgress, setSongProgress] = useState({ currentTime: 0, duration: 0 })
   const [activeChannels, setActiveChannels] = useState<boolean[]>(new Array(8).fill(false))
   const [mutedChannels, setMutedChannels] = useState<boolean[]>(new Array(8).fill(false))
   const [shiftPressed, setShiftPressed] = useState<boolean>(false)
@@ -40,6 +49,10 @@ function App() {
   const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map())
   const [showHelp, setShowHelp] = useState<boolean>(false)
   const [showQueue, setShowQueue] = useState<boolean>(true)
+  const [mainTrackAudio, setMainTrackAudio] = useState<HTMLAudioElement | null>(null)
+  const [showBpmGuide, setShowBpmGuide] = useState<boolean>(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [currentDeck, setCurrentDeck] = useState<'left' | 'right'>('left')
   const [queueSongs] = useState([
     { title: "Uptown Funk", artist: "Bruno Mars", status: "playing" },
     { title: "Good 4 U", artist: "Olivia Rodrigo", status: "queued" },
@@ -109,6 +122,283 @@ function App() {
       }
     }
   }, [audioElements, globalPaused])
+
+  // BPM Guide data based on energy building chart
+  const bpmGuide = [
+    { phase: 'Opening', bpmRange: '120-125', description: 'Ease the crowd into the vibe' },
+    { phase: 'Build-up', bpmRange: '125-130', description: 'Gradually increase energy' },
+    { phase: 'Peak time', bpmRange: '130-135', description: 'High-energy moments' },
+    { phase: 'Cool down', bpmRange: '125-120', description: 'Wind down the set' }
+  ]
+
+  // File handling functions
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, position: 'left' | 'right') => {
+    const files = event.target.files
+    if (!files || files.length === 0) return
+
+    const newTracks: Track[] = []
+    let loadedCount = 0
+
+    Array.from(files).forEach((file, index) => {
+      const isMP3 = file.type === 'audio/mp3' ||
+                   file.type === 'audio/mpeg' ||
+                   file.name.toLowerCase().endsWith('.mp3')
+
+      if (!isMP3) {
+        alert(`${file.name} is not an MP3 file`)
+        return
+      }
+
+      const url = URL.createObjectURL(file)
+      const audio = new Audio(url)
+
+      audio.addEventListener('loadedmetadata', () => {
+        const fileName = file.name.replace('.mp3', '')
+        const parts = fileName.split(' - ')
+        const title = parts.length > 1 ? parts[1] : fileName
+        const artist = parts.length > 1 ? parts[0] : 'Unknown Artist'
+
+        const newTrack: Track = {
+          id: `loaded-${Date.now()}-${index}`,
+          title,
+          artist,
+          playing: false,
+          position: 'left',
+          audioFile: url,
+          duration: audio.duration,
+          currentTime: 0,
+          bpm: 120
+        }
+
+        newTracks.push(newTrack)
+        loadedCount++
+
+        if (loadedCount === files.length) {
+          setLoadedTracks(prev => [...prev, ...newTracks])
+          if (newTracks.length > 0) {
+            const firstTrack = newTracks[0]
+            setTracks(prev => prev.map(track =>
+              track.position === position
+                ? { ...firstTrack, position }
+                : track
+            ))
+            setCurrentTrackIndex(loadedTracks.length) // Set to the first of the newly loaded tracks
+          }
+        }
+      })
+    })
+
+    // Reset file input
+    event.target.value = ''
+  }, [loadedTracks])
+
+  const togglePlayPause = useCallback(() => {
+    // Check if any track is currently playing
+    const playingTrack = tracks.find(t => t.playing)
+
+    if (mainTrackAudio) {
+      if (!mainTrackAudio.paused) {
+        // Currently playing - pause it
+        mainTrackAudio.pause()
+        setTracks(prev => prev.map(track => ({ ...track, playing: false })))
+      } else {
+        // Currently paused - resume it
+        mainTrackAudio.play().catch(console.error)
+        setTracks(prev => prev.map(track =>
+          track.id === playingTrack?.id ? { ...track, playing: true } : track
+        ))
+      }
+      return
+    }
+
+    // If no mainTrackAudio but we have loaded tracks, try to start from loadedTracks
+    if (loadedTracks.length === 0) {
+      alert('No tracks loaded. Please load MP3 files first.')
+      return
+    }
+
+    const currentTrack = loadedTracks[currentTrackIndex]
+    if (!currentTrack?.audioFile) return
+
+    const activePosition = tracks.find(t => t.playing)?.position || 'left'
+
+    // Start new audio
+    const newAudio = new Audio(currentTrack.audioFile)
+    newAudio.volume = 0.8
+
+    newAudio.addEventListener('timeupdate', () => {
+      setSongProgress({
+        currentTime: newAudio.currentTime,
+        duration: newAudio.duration || 0
+      })
+      setTracks(prev => prev.map(t =>
+        t.id === currentTrack.id
+          ? { ...t, currentTime: newAudio.currentTime }
+          : t
+      ))
+    })
+
+    newAudio.addEventListener('loadedmetadata', () => {
+      setSongProgress({
+        currentTime: 0,
+        duration: newAudio.duration || 0
+      })
+    })
+
+    newAudio.addEventListener('ended', () => {
+      // Auto advance to next track when song ends
+      const nextIndex = (currentTrackIndex + 1) % loadedTracks.length
+      setCurrentTrackIndex(nextIndex)
+      const nextTrackData = loadedTracks[nextIndex]
+      if (nextTrackData?.audioFile) {
+        const autoAudio = new Audio(nextTrackData.audioFile)
+        autoAudio.volume = 0.8
+        setMainTrackAudio(autoAudio)
+        autoAudio.play().catch(console.error)
+      }
+    })
+
+    setMainTrackAudio(newAudio)
+    newAudio.play().catch(console.error)
+
+    setTracks(prev => prev.map(track => {
+      if (track.position === activePosition) {
+        return { ...currentTrack, position: activePosition, playing: true }
+      }
+      return { ...track, playing: false }
+    }))
+  }, [loadedTracks, currentTrackIndex, mainTrackAudio, tracks])
+
+  const nextTrack = useCallback(() => {
+    if (loadedTracks.length === 0) return
+
+    const wasPlaying = tracks.some(t => t.playing)
+    const nextIndex = (currentTrackIndex + 1) % loadedTracks.length
+    setCurrentTrackIndex(nextIndex)
+
+    const nextTrackData = loadedTracks[nextIndex]
+    const activePosition = tracks.find(t => t.playing)?.position || 'left'
+
+    // Stop current audio
+    if (mainTrackAudio) {
+      mainTrackAudio.pause()
+      mainTrackAudio.currentTime = 0
+    }
+
+    // Update tracks display
+    setTracks(prev => prev.map(track =>
+      track.position === activePosition
+        ? { ...nextTrackData, position: activePosition, playing: false }
+        : { ...track, playing: false }
+    ))
+
+    // Auto-play if something was playing
+    if (wasPlaying && nextTrackData?.audioFile) {
+      setTimeout(() => {
+        const newAudio = new Audio(nextTrackData.audioFile)
+        newAudio.volume = 0.8
+
+        newAudio.addEventListener('timeupdate', () => {
+          setSongProgress({
+            currentTime: newAudio.currentTime,
+            duration: newAudio.duration || 0
+          })
+        })
+
+        newAudio.addEventListener('loadedmetadata', () => {
+          setSongProgress({
+            currentTime: 0,
+            duration: newAudio.duration || 0
+          })
+        })
+
+        newAudio.addEventListener('ended', () => {
+          nextTrack()
+        })
+
+        setMainTrackAudio(newAudio)
+        newAudio.play().catch(console.error)
+
+        setTracks(prev => prev.map(track =>
+          track.position === activePosition
+            ? { ...track, playing: true }
+            : track
+        ))
+      }, 100)
+    }
+  }, [loadedTracks, currentTrackIndex, tracks, mainTrackAudio])
+
+  const prevTrack = useCallback(() => {
+    if (loadedTracks.length === 0) return
+
+    const wasPlaying = tracks.some(t => t.playing)
+    const prevIndex = currentTrackIndex === 0 ? loadedTracks.length - 1 : currentTrackIndex - 1
+    setCurrentTrackIndex(prevIndex)
+
+    const prevTrackData = loadedTracks[prevIndex]
+    const activePosition = tracks.find(t => t.playing)?.position || 'left'
+
+    // Stop current audio
+    if (mainTrackAudio) {
+      mainTrackAudio.pause()
+      mainTrackAudio.currentTime = 0
+    }
+
+    // Update tracks display
+    setTracks(prev => prev.map(track =>
+      track.position === activePosition
+        ? { ...prevTrackData, position: activePosition, playing: false }
+        : { ...track, playing: false }
+    ))
+
+    // Auto-play if something was playing
+    if (wasPlaying && prevTrackData?.audioFile) {
+      setTimeout(() => {
+        const newAudio = new Audio(prevTrackData.audioFile)
+        newAudio.volume = 0.8
+
+        newAudio.addEventListener('timeupdate', () => {
+          setSongProgress({
+            currentTime: newAudio.currentTime,
+            duration: newAudio.duration || 0
+          })
+        })
+
+        newAudio.addEventListener('loadedmetadata', () => {
+          setSongProgress({
+            currentTime: 0,
+            duration: newAudio.duration || 0
+          })
+        })
+
+        newAudio.addEventListener('ended', () => {
+          // Auto advance to next track
+          const nextIndex = (prevIndex + 1) % loadedTracks.length
+          setCurrentTrackIndex(nextIndex)
+        })
+
+        setMainTrackAudio(newAudio)
+        newAudio.play().catch(console.error)
+
+        setTracks(prev => prev.map(track =>
+          track.position === activePosition
+            ? { ...track, playing: true }
+            : track
+        ))
+      }, 100)
+    }
+  }, [loadedTracks, currentTrackIndex, tracks, mainTrackAudio])
+
+  const handleVinylClick = useCallback((position: 'left' | 'right') => {
+    const track = tracks.find(t => t.position === position)
+    if (!track?.audioFile) {
+      setCurrentDeck(position)
+      fileInputRef.current?.click()
+      return
+    }
+
+    togglePlayPause()
+  }, [tracks, togglePlayPause])
 
   const stopAudio = useCallback((soundFile: string) => {
     if (!soundFile) return
@@ -333,6 +623,32 @@ function App() {
         return
       }
 
+      // Handle BPM guide toggle
+      if (key === '~' || key === '`') {
+        event.preventDefault()
+        setShowBpmGuide(prev => !prev)
+        return
+      }
+
+      // Handle main track playback controls
+      if (key === '9') {
+        event.preventDefault()
+        togglePlayPause()
+        return
+      }
+
+      if (key === 'o') {
+        event.preventDefault()
+        prevTrack()
+        return
+      }
+
+      if (key === 'l') {
+        event.preventDefault()
+        nextTrack()
+        return
+      }
+
       // Handle shift key (keep for future audio splicing features)
       if (key === 'shift') {
         setShiftPressed(true)
@@ -404,22 +720,40 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
+    <div className="h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4 overflow-hidden">
+      {/* Song Progress Bar */}
+      <SongProgress
+        currentTime={songProgress.currentTime}
+        duration={songProgress.duration}
+        isPlaying={tracks.some(t => t.playing)}
+      />
       {/* Header */}
       <div className="flex items-center justify-center w-full mb-4">
         <div className="flex items-center">
           <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mr-4">
             <div className="w-8 h-8 bg-black transform rotate-45"></div>
           </div>
-          <h1 className="text-4xl font-bold tracking-wider">DHX</h1>
+          <h1 className="text-4xl font-bold tracking-wider futuristic-font">DHX</h1>
           {/* <span className="ml-4 px-3 py-1 bg-gray-700 rounded text-sm">INTRO</span> */}
         </div>
       </div>
 
-      <div className="flex items-center justify-between w-full max-w-7xl">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".mp3,audio/mp3"
+        multiple
+        className="hidden"
+        onChange={(e) => handleFileUpload(e, currentDeck)}
+      />
+
+      <div className="flex items-center justify-center w-full max-w-7xl gap-8">
         {/* Left Vinyl */}
-        <div className="flex-shrink-0 mr-6">
-          <VinylRecord track={tracks[0]} />
+        <div className="flex-shrink-0">
+          <div onClick={() => handleVinylClick('left')} className="cursor-pointer">
+            <VinylRecord track={tracks[0]} />
+          </div>
         </div>
 
         {/* Launchpad Grid - Fixed 8x8 */}
@@ -455,8 +789,8 @@ function App() {
 
               const padContent = (
                 <>
-                  {/* Circular icon for loops, arrow for one-shots */}
-                  <div className="absolute top-1 left-1">
+                  {/* Circular icon for loops, arrow for one-shots - Fixed positioning */}
+                  <div className="absolute top-1 left-1 pointer-events-none">
                     {pad.isOneShot ? (
                       <div className="text-white/40 text-xs">→</div>
                     ) : (
@@ -466,11 +800,11 @@ function App() {
 
                   {/* Key binding (show only if shiftPressed) */}
                   {pad.keyBinding && shiftPressed && (
-                    <div className="text-white/60 text-[10px] mb-1">{pad.keyBinding}</div>
+                    <div className="text-white/60 text-[10px] mb-1 pointer-events-none">{pad.keyBinding}</div>
                   )}
 
                   {/* Label */}
-                  <div className="text-[9px] leading-tight text-center px-1">
+                  <div className="text-[9px] leading-tight text-center px-1 pointer-events-none">
                     {pad.label}
                   </div>
                 </>
@@ -503,22 +837,25 @@ function App() {
                 ⏸ PAUSED - Press SPACEBAR to resume
               </div>
             )}
-            <div className="text-gray-400 text-sm">
-              Press <kbd className="px-2 py-1 bg-gray-800 rounded text-white">?</kbd> for help
+            <div className="text-gray-400 text-sm space-x-2 futuristic-font">
+              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">?</kbd> for help</span>
+              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">~</kbd> for BPM guide</span>
             </div>
           </div>
         </div>
 
         {/* Right Vinyl */}
-        <div className="flex-shrink-0 ml-6">
-          <VinylRecord track={tracks[1]} />
+        <div className="flex-shrink-0">
+          <div onClick={() => handleVinylClick('right')} className="cursor-pointer">
+            <VinylRecord track={tracks[1]} />
+          </div>
         </div>
       </div>
 
       {/* Help Modal */}
       {showHelp && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg p-8 max-w-2xl mx-4 border border-gray-700">
+          <div className="bg-gray-900/80 backdrop-blur-md rounded-lg p-8 max-w-2xl mx-4 border border-gray-700">
             <h2 className="text-2xl font-bold mb-6 text-white">Launchpad Controls</h2>
             <div className="space-y-4 text-gray-300">
               <div>
@@ -550,12 +887,13 @@ function App() {
                 </ul>
               </div>
               <div>
-                <h3 className="font-semibold text-white mb-2">Queue Controls:</h3>
+                <h3 className="font-semibold text-white mb-2">Main Track Controls:</h3>
                 <ul className="space-y-1 ml-4">
-                  <li>• ⏮ Previous track</li>
-                  <li>• ⏯ Play/Pause toggle</li>
-                  <li>• ⏭ Next track</li>
-                  <li>• ✕ Close queue</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">9</kbd> Play/Pause main track</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">O</kbd> Previous track</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">L</kbd> Next track</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">.</kbd> Toggle queue</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">~</kbd> Toggle BPM guide</li>
                 </ul>
               </div>
             </div>
@@ -569,9 +907,61 @@ function App() {
         </div>
       )}
 
+      {/* BPM Guide Box - Top Left */}
+      <div
+        className={`fixed top-4 left-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+          showBpmGuide
+            ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
+            : '-translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
+        }`}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-white font-semibold">BPM Guide</h3>
+          <button
+            onClick={() => setShowBpmGuide(false)}
+            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Current playing song info */}
+        {(() => {
+          const playingTrack = tracks.find(t => t.playing)
+          return playingTrack ? (
+            <div className="mb-4 p-3 bg-blue-600/20 rounded border border-blue-500/30">
+              <div className="text-white font-medium text-sm truncate">{playingTrack.title}</div>
+              <div className="text-gray-300 text-xs truncate">{playingTrack.artist}</div>
+              <div className="text-green-400 text-xs mt-1 flex items-center">
+                <Volume2 size={10} className="mr-1" />
+                {playingTrack.bpm} BPM • Now Playing
+              </div>
+            </div>
+          ) : (
+            <div className="mb-4 p-3 bg-gray-800/50 rounded">
+              <div className="text-gray-400 text-xs">No track playing</div>
+            </div>
+          )
+        })()}
+
+        {/* BPM Guide Chart */}
+        <div className="space-y-2">
+          <h4 className="text-white text-xs font-medium mb-2">Energy Building Guide:</h4>
+          {bpmGuide.map((guide, index) => (
+            <div key={index} className="bg-gray-800/30 p-2 rounded text-xs">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-white font-medium">{guide.phase}</span>
+                <span className="text-green-400 font-mono">{guide.bpmRange}</span>
+              </div>
+              <div className="text-gray-400 text-[10px]">{guide.description}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Song Queue Box - Bottom Right */}
       <div
-        className={`fixed bottom-4 right-4 w-80 z--1 sbg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+        className={`fixed bottom-4 right-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
           showQueue
             ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
             : 'translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
@@ -580,14 +970,23 @@ function App() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-white font-semibold">Queue</h3>
             <div className="flex gap-2">
-              <button className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
-                ⏮
+              <button
+                onClick={prevTrack}
+                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
+              >
+                <SkipBack size={12} />
               </button>
-              <button className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
-                ⏯
+              <button
+                onClick={togglePlayPause}
+                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
+              >
+                {tracks.find(t => t.playing) ? <Pause size={12} /> : <Play size={12} />}
               </button>
-              <button className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
-                ⏭
+              <button
+                onClick={nextTrack}
+                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
+              >
+                <SkipForward size={12} />
               </button>
               <button
                 onClick={() => setShowQueue(false)}
@@ -599,21 +998,41 @@ function App() {
           </div>
 
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {queueSongs.map((song, index) => (
+            {loadedTracks.map((song, index) => (
               <div
-                key={index}
-                className={`p-2 rounded ${song.status === 'playing' ? 'bg-blue-600/20' : 'bg-gray-800/50'}`}
+                key={song.id}
+                className={`p-2 rounded cursor-pointer hover:bg-gray-700/50 ${
+                  index === currentTrackIndex ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-gray-800/50'
+                }`}
+                onClick={() => {
+                  setCurrentTrackIndex(index)
+                  const playingTrack = tracks.find(t => t.playing)
+                  const position = playingTrack?.position || 'left'
+                  setTracks(prev => prev.map(track =>
+                    track.position === position
+                      ? { ...song, position, playing: false }
+                      : track
+                  ))
+                }}
                 style={{
-                  opacity: index === 0 ? 1 : Math.max(0.3, 1 - (index * 0.15))
+                  opacity: index === currentTrackIndex ? 1 : Math.max(0.3, 1 - (Math.abs(index - currentTrackIndex) * 0.15))
                 }}
               >
                 <div className="text-white text-sm font-medium truncate">{song.title}</div>
                 <div className="text-gray-400 text-xs truncate">{song.artist}</div>
-                {song.status === 'playing' && (
+                {index === currentTrackIndex && tracks.find(t => t.playing) && (
                   <div className="text-green-400 text-xs">● Now Playing</div>
+                )}
+                {index === currentTrackIndex && !tracks.find(t => t.playing) && (
+                  <div className="text-yellow-400 text-xs">● Current Track</div>
                 )}
               </div>
             ))}
+            {loadedTracks.length === 0 && (
+              <div className="p-4 text-gray-400 text-center text-sm">
+                No tracks loaded. Click on a vinyl to load MP3 files.
+              </div>
+            )}
           </div>
         </div>
     </div>
