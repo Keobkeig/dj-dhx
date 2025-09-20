@@ -48,23 +48,23 @@ function App() {
     { title: "Stay", artist: "The Kid LAROI", status: "queued" }
   ])
 
-  // 8x8 keyboard mapping - each row has unique keys to avoid conflicts
+  // 8x8 keyboard mapping - each row has unique keys to avoid conflicts (updated)
   const keyMap: { [key: string]: string } = {
-    // Base layer (rows 0-3) - numbers and lowercase qwerty top 4 rows
+    // Row 0
     '1': '0-0', '2': '0-1', '3': '0-2', '4': '0-3', '5': '0-4', '6': '0-5', '7': '0-6', '8': '0-7',
+    // Row 1
     'q': '1-0', 'w': '1-1', 'e': '1-2', 'r': '1-3', 't': '1-4', 'y': '1-5', 'u': '1-6', 'i': '1-7',
+    // Row 2
     'a': '2-0', 's': '2-1', 'd': '2-2', 'f': '2-3', 'g': '2-4', 'h': '2-5', 'j': '2-6', 'k': '2-7',
+    // Row 3
     'z': '3-0', 'x': '3-1', 'c': '3-2', 'v': '3-3', 'b': '3-4', 'n': '3-5', 'm': '3-6', ',': '3-7',
-
-    // Row 4 - currently unmapped
-
-    // Row 5 - symbols (!@#$%^&*) for second layer sounds
-    '!': '5-0', '@': '5-1', '#': '5-2', '$': '5-3', '%': '5-4', '^': '5-5', '&': '5-6', '*': '5-7',
-
-    // Row 6 - STOP controls (uppercase ASDFGHJKL to avoid conflict with lowercase)
-    'A': '6-0', 'S': '6-1', 'D': '6-2', 'F': '6-3', 'G': '6-4', 'H': '6-5', 'J': '6-6', 'K': '6-7',
-
-    // Row 7 - MUTE controls (uppercase ZXCVBNM and comma)
+    // Row 4
+    '!': '4-0', '@': '4-1', '#': '4-2', '$': '4-3', '%': '4-4', '^': '4-5', '&': '4-6', '*': '4-7',
+    // Row 5
+    'Q': '5-0', 'W': '5-1', 'E': '5-2', 'R': '5-3', 'T': '5-4', 'Y': '5-5', 'U': '5-6', 'O': '5-7',
+    // Row 6
+    'A': '6-0', 'S': '6-1', 'D': '6-2', 'F': '6-3', 'G': '6-4', 'H': '6-5', 'J': '6-6', 'L': '6-7',
+    // Row 7
     'Z': '7-0', 'X': '7-1', 'C': '7-2', 'V': '7-3', 'B': '7-4', 'N': '7-5', 'M': '7-6', '<': '7-7'
   }
 
@@ -136,11 +136,22 @@ function App() {
     })
   }, [audioElements])
 
-  // Initialize 8x8 grid with 48 sounds + stop/mute
+  // Initialize 8x8 grid with sounds + stop/mute, new keyRows mapping
   useEffect(() => {
     const initialPads: Pad[] = []
 
-    // Create a completely organized 8x8 grid
+    // Updated keyRows for all 8 rows (including STOP and MUTE)
+    const keyRows = [
+      ['1', '2', '3', '4', '5', '6', '7', '8'],      // Row 0
+      ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i'],      // Row 1
+      ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k'],      // Row 2
+      ['z', 'x', 'c', 'v', 'b', 'n', 'm', ','],      // Row 3
+      ['!', '@', '#', '$', '%', '^', '&', '*'],      // Row 4
+      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'O'],      // Row 5
+      ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'L'],      // Row 6
+      ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '<']       // Row 7
+    ]
+
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         let soundType: PadType
@@ -188,32 +199,10 @@ function App() {
             label = `VOCAL ${soundIndex}`
             soundFile = `${basePath}FREE ${((soundIndex - 1) % 6) + 1}.wav`
           }
-
-          // Add keyboard bindings for sound rows (0-5)
-          if (row < 6) {
-            const keyRows = [
-              ['1', '2', '3', '4', '5', '6', '7', '8'],      // Row 0
-              ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'],      // Row 1
-              ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K'],      // Row 2
-              ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ','],      // Row 3
-              ['Tab', 'Caps', '\\', 'Enter', 'Shift', 'Ctrl', 'Alt', '/'], // Row 4 - using available keys
-              ['!', '@', '#', '$', '%', '^', '&', '*']       // Row 5 (shift + symbols)
-            ]
-            keyBinding = keyRows[row][col] || ''
-          }
-
-          // Add keyboard bindings for STOP row (row 6)
-          if (row === 6) {
-            const stopKeys = ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K']
-            keyBinding = stopKeys[col] || ''
-          }
-
-          // Add keyboard bindings for MUTE row (row 7)
-          if (row === 7) {
-            const muteKeys = ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '<']
-            keyBinding = muteKeys[col] || ''
-          }
         }
+
+        // Assign keyBinding for all rows from keyRows
+        keyBinding = keyRows[row][col] || ''
 
         initialPads.push({
           id: `${row}-${col}`,
@@ -350,8 +339,15 @@ function App() {
         return
       }
 
-      // Find pad by key mapping - check both the key and the event.key
-      let padId = keyMap[key] || keyMap[event.key]
+      // Find pad by key mapping - prioritize case-sensitive match with shift
+      let padId: string | undefined
+      if (event.shiftKey) {
+        // Prioritize exact case-sensitive match when shift is held
+        padId = keyMap[event.key]
+      } else {
+        // Default to lowercase mappings
+        padId = keyMap[event.key.toLowerCase()]
+      }
       if (padId) {
         const pad = pads.find(p => p.id === padId)
         if (pad) {
@@ -468,8 +464,8 @@ function App() {
                     )}
                   </div>
 
-                  {/* Key binding */}
-                  {pad.keyBinding && (
+                  {/* Key binding (show only if shiftPressed) */}
+                  {pad.keyBinding && shiftPressed && (
                     <div className="text-white/60 text-[10px] mb-1">{pad.keyBinding}</div>
                   )}
 
@@ -575,7 +571,7 @@ function App() {
 
       {/* Song Queue Box - Bottom Right */}
       <div
-        className={`fixed bottom-4 right-4 w-80 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+        className={`fixed bottom-4 right-4 w-80 z--1 sbg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
           showQueue
             ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
             : 'translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
