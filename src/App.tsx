@@ -486,6 +486,7 @@ function App() {
     }
   }, [audioElements])
 
+
   const pauseAllAudio = useCallback(() => {
     audioElements.forEach(audio => {
       if (!audio.paused) {
@@ -513,18 +514,178 @@ function App() {
       ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k'],      // Row 2
       ['z', 'x', 'c', 'v', 'b', 'n', 'm', ','],      // Row 3
       ['!', '@', '#', '$', '%', '^', '&', '*'],      // Row 4
-      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'O'],      // Row 5
-      ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'L'],      // Row 6
+      ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I'],      // Row 5
+      ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K'],      // Row 6
       ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '<']       // Row 7
     ]
 
-    // Hardcoded sound file mappings
-    const drumSounds = {
-      kicks: ['/Drums/Kicks/1.wav', '/Drums/Kicks/2.wav', '/Drums/Kicks/3.wav', '/Drums/Kicks/4.wav', '/Drums/Kicks/5.wav', '/Drums/Kicks/6.wav'],
-      snares: ['/Drums/Snares/1.wav', '/Drums/Snares/2.wav', '/Drums/Snares/3.wav', '/Drums/Snares/4.wav', '/Drums/Snares/5.wav', '/Drums/Snares/6.wav'],
-      hats: ['/Drums/Closed Hats/1.wav', '/Drums/Closed Hats/2.wav', '/Drums/Open Hats/1.wav', '/Drums/Open Hats/2.wav', '/Drums/Claps/1.wav', '/Drums/Claps/2.wav'],
-      percussion: ['/Drums/Percussion/1.wav', '/Drums/Percussion/2.wav', '/Drums/Snaps/1.wav', '/Drums/Snaps/2.wav', '/Drums/808s/1.wav', '/Drums/808s/2.wav']
+    // Organized sound mappings - Coffee Shop (loops) + Pharrell (one-shots)
+    // Columns 0-3: DRUMS | Columns 4-5: MELODIC | Column 6: BASS | Column 7: FULL SONGS
+    const allSounds = {
+      // Column 0: Kicks (Orange - DRUMS)
+      kicks: [
+        '/Coffee Shop Loop Kit/Pine Cones - 87 BPM/Pine Cones - 87 BPM Kick.wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Kicks.wav',
+        '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Kick.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah-2).wav'
+      ],
+
+      // Column 1: Snares (Orange - DRUMS)
+      snares: [
+        '/Coffee Shop Loop Kit/Pine Cones - 87 BPM/Pine Cones - 87 BPM Snare.wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Snare.wav',
+        '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Snare.wav',
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Snare.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana-2).wav'
+      ],
+
+      // Column 2: Hats (Orange - DRUMS)
+      hats: [
+        '/Coffee Shop Loop Kit/Pine Cones - 87 BPM/Pine Cones - 87 BPM Hats.wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Hats.wav',
+        '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Hats.wav',
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Hats.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav'
+      ],
+
+      // Column 3: Percussion (Orange - DRUMS)
+      percussion: [
+        '/Coffee Shop Loop Kit/Pine Cones - 87 BPM/Pine Cones - 87 BPM Perc.wav',
+        '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Perc.wav',
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Perc.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-1).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-2).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-3).wav'
+      ],
+
+      // Column 4: Keys/Piano (Purple - MELODIC)
+      keys: [
+        '/Coffee Shop Loop Kit/Foggy Dreams - C Major 85 BPM/Foggy Dreams - C Major 85 BPM Epiano.wav',
+        '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Music Box.wav',
+        '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Trumpet.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (By Your Side).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Ed session).wav'
+      ],
+
+      // Column 5: Bells/Synths (Purple - MELODIC)
+      bells: [
+        '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Bells.wav',
+        '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Distorted Synth.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ODB session - 1998).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (for sweetener album).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana-2).wav'
+      ],
+
+      // Column 6: Bass/Low End (Green - BASS)
+      bass: [
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM No Texture.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Mariah-2).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Solange session).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Jay Z).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav'
+      ],
+
+      // Column 7: Full Songs (Cyan - FULL TRACKS)
+      fullSongs: [
+        '/Coffee Shop Loop Kit/Pine Cones - 87 BPM/Pine Cones - 87 BPM Full.wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Full.wav',
+        '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Full.wav',
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Full.wav',
+        '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Full.wav',
+        '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Full.wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav'
+      ]
     }
+
+    // COMMENTED OUT - Pharrell Williams Production Kit sound mappings
+    /*
+    const pharrellSounds = {
+      // Orange: Drums (loops) - Various drum elements
+      drums: [
+        // Kicks
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Blurred Lines).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (808).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Ariana-thump).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Madonna).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Superthug).wav',
+        // Snares
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snares/Snare (Ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snares/Snare (Neptunes).wav',
+        // Closed Hats
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Jay Z).wav',
+        // Open Hats
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah).wav',
+        // Claps & Snaps
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Claps/Clap (Ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Claps/Clap (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana-2).wav',
+        // 808s
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/808s/808 (Ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/808s/808 (Mariah).wav',
+        // Percussion
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Bells/Bell (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Bongos/Bongo (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Congas/Conga (ariana).wav'
+      ],
+
+      // Green: Bass (loops)
+      bass: [
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Blurred Lines).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Snoop).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Nelly).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Super synthy).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (upright-ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass Lick (Blurred).wav'
+      ],
+
+      // Purple: Melodic (loops) - Synths, Pads, Guitars
+      melodic: [
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (NERD).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Britney).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Megan).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth Short (Britney).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Pads/Pad (ariana-angelic).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Pads/Pad (Mariah).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Guitars/Guitar (Mariah).wav'
+      ],
+
+      // Cyan: FX (one-shots)
+      fx: [
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/Siren SFX (Neptunes).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/Cellphone SFX (fabo).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/SFX (Ed session).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth sfx (bey session).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Shakers/Shaker (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Tambourines/Tambourine (ariana).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-1).wav',
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-2).wav'
+      ],
+
+      // Pink: Vocals (one-shots)
+      vocals: [
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Vocals/Vox (Sing).wav',
+        "/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Vocals/Vox (yo thoughts ain't my thoughts).wav"
+      ]
+    }
+    */
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
@@ -542,40 +703,66 @@ function App() {
           soundType = 'mute'
           label = 'MUTE'
         } else {
-          // Rows 0-5: 48 sounds (6 rows × 8 columns)
+          // Rows 0-5: 48 sounds (6 rows × 8 columns) using Pharrell sounds
           const soundIndex = row * 8 + col
 
-          // Organize sounds by type across the grid
+          // Organized Coffee Shop + Pharrell by sound type
           if (col === 0) {
-            // Column 0: KICKS
+            // Column 0: Kicks (Orange - DRUMS)
             soundType = 'drums'
-            label = `KICK ${row + 1}`
-            soundFile = drumSounds.kicks[row % drumSounds.kicks.length]
+            const kickIndex = row % allSounds.kicks.length
+            soundFile = allSounds.kicks[kickIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `KICK ${kickIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `KICK ${kickIndex + 1}`
           } else if (col === 1) {
-            // Column 1: SNARES & CLAPS
+            // Column 1: Snares (Orange - DRUMS)
             soundType = 'drums'
-            label = row < 3 ? `SNARE ${row + 1}` : `CLAP ${row - 2}`
-            soundFile = row < 3 ? drumSounds.snares[row % drumSounds.snares.length] : drumSounds.hats[(row - 3) % drumSounds.hats.length]
+            const snareIndex = row % allSounds.snares.length
+            soundFile = allSounds.snares[snareIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `SNARE ${snareIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `SNARE ${snareIndex + 1}`
           } else if (col === 2) {
-            // Column 2: BASS & 808s
-            soundType = 'bass'
-            label = `BASS ${row + 1}`
-            soundFile = `/Bass/${(row % 6) + 1}.wav`
-          } else if (col < 5) {
-            // Columns 3-4: MELODIC
+            // Column 2: Hats (Orange - DRUMS)
+            soundType = 'drums'
+            const hatIndex = row % allSounds.hats.length
+            soundFile = allSounds.hats[hatIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `HATS ${hatIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `HATS ${hatIndex + 1}`
+          } else if (col === 3) {
+            // Column 3: Percussion (Orange - DRUMS)
+            soundType = 'drums'
+            const percIndex = row % allSounds.percussion.length
+            soundFile = allSounds.percussion[percIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `PERC ${percIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `PERC ${percIndex + 1}`
+          } else if (col === 4) {
+            // Column 4: Keys/Piano (Purple - MELODIC)
             soundType = 'melodic'
-            label = `MELODIC ${soundIndex + 1}`
-            soundFile = `/Melodic/${((soundIndex) % 12) + 1}.wav`
-          } else if (col < 7) {
-            // Columns 5-6: FX
-            soundType = 'fx'
-            label = `FX ${soundIndex + 1}`
-            soundFile = `/FX/${((soundIndex) % 12) + 1}.wav`
+            const keyIndex = row % allSounds.keys.length
+            soundFile = allSounds.keys[keyIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `KEYS ${keyIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `KEYS ${keyIndex + 1}`
+          } else if (col === 5) {
+            // Column 5: Bells/Synths (Purple - MELODIC)
+            soundType = 'melodic'
+            const bellIndex = row % allSounds.bells.length
+            soundFile = allSounds.bells[bellIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `BELLS ${bellIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `BELLS ${bellIndex + 1}`
+          } else if (col === 6) {
+            // Column 6: Bass/Low End (Green - BASS)
+            soundType = 'bass'
+            const bassIndex = row % allSounds.bass.length
+            soundFile = allSounds.bass[bassIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `BASS ${bassIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(/\(.*?\)/g, '').trim() || `BASS ${bassIndex + 1}`
           } else {
-            // Column 7: VOCAL
-            soundType = 'vocal'
-            label = `VOCAL ${row + 1}`
-            soundFile = `/Vocals/${(row % 6) + 1}.wav`
+            // Column 7: Full Songs (Cyan - FULL TRACKS)
+            soundType = 'fx'
+            const fullIndex = row % allSounds.fullSongs.length
+            soundFile = allSounds.fullSongs[fullIndex]
+            const fileName = soundFile.split('/').pop()?.replace('.wav', '') || `FULL ${fullIndex + 1}`
+            label = fileName.replace(/.*BPM\s/, '').replace(' Full', '').replace(/\(.*?\)/g, '').trim() || `FULL ${fullIndex + 1}`
           }
         }
 
@@ -591,7 +778,9 @@ function App() {
           col,
           label,
           keyBinding,
-          isOneShot: soundType === 'fx' || soundType === 'vocal',
+          isOneShot: (soundType === 'fx' || soundType === 'vocal') &&
+                     !(soundFile && soundFile.includes('Full.wav')) ||
+                     (soundFile && soundFile.includes('/Pharell Williams Drums/')),
           soundFile
         })
       }
@@ -740,16 +929,53 @@ function App() {
         return
       }
 
+      // Handle track seeking controls with arrow keys
+      if (key === 'arrowleft') {
+        event.preventDefault()
+        // Go to beginning of left track
+        if (leftDeckAudio) {
+          leftDeckAudio.currentTime = 0
+        }
+        return
+      }
+
+      if (key === 'arrowright') {
+        event.preventDefault()
+        // Go to end of left track
+        if (leftDeckAudio && leftDeckAudio.duration) {
+          leftDeckAudio.currentTime = leftDeckAudio.duration - 1
+        }
+        return
+      }
+
+      if (key === 'arrowdown') {
+        event.preventDefault()
+        // Go to beginning of right track
+        if (rightDeckAudio) {
+          rightDeckAudio.currentTime = 0
+        }
+        return
+      }
+
+      if (key === 'arrowup') {
+        event.preventDefault()
+        // Go to end of right track
+        if (rightDeckAudio && rightDeckAudio.duration) {
+          rightDeckAudio.currentTime = rightDeckAudio.duration - 1
+        }
+        return
+      }
+
       // Handle crossfader controls with [ and ]
       if (key === '[') {
         event.preventDefault()
-        setCrossfaderPosition(prev => Math.max(0, prev - 0.1)) // Move left
+        setCrossfaderPosition(prev => Math.max(0, prev - 0.2)) // Move left
         return
       }
 
       if (key === ']') {
         event.preventDefault()
-        setCrossfaderPosition(prev => Math.min(1, prev + 0.1)) // Move right
+        setCrossfaderPosition(prev => Math.min(1, prev + 0.2)) // Move right
         return
       }
 
@@ -1027,70 +1253,90 @@ function App() {
       {/* Help Modal */}
       {showHelp && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-900/80 backdrop-blur-md rounded-lg p-8 max-w-2xl mx-4 border border-gray-700">
-            <h2 className="text-2xl font-bold mb-6 text-white">Launchpad Controls</h2>
-            <div className="space-y-4 text-gray-300">
-              <div>
-                <h3 className="font-semibold text-white mb-2">Basic Controls:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• Click pads to trigger sounds</li>
-                  <li>• Use keyboard keys to trigger pads (see mapping below)</li>
-                  <li>• Spacebar: Global pause/unpause</li>
-                  <li>• Only one loop sound per column can be active</li>
-                </ul>
+          <div className="bg-gray-900/80 backdrop-blur-md rounded-lg p-6 max-w-4xl mx-4 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Launchpad Controls</h2>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-6 text-gray-300 text-sm">
+              {/* Left Column */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Basic Controls:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• Click pads to trigger sounds</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">Space</kbd> Global pause/unpause</li>
+                    <li>• Only one loop per column active</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Sound Types:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <span className="text-orange-400">Orange</span>: Drums</li>
+                    <li>• <span className="text-green-400">Green</span>: Bass</li>
+                    <li>• <span className="text-purple-400">Purple</span>: Melodic</li>
+                    <li>• <span className="text-cyan-400">Cyan</span>: FX</li>
+                    <li>• <span className="text-pink-400">Pink</span>: Vocals</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Deck Controls:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">9</kbd> Play/Pause left deck</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">O</kbd> Play/Pause right deck</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">L</kbd> Next track</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Track Seeking:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">←→</kbd> Left track start/end</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">↓↑</kbd> Right track start/end</li>
+                  </ul>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-white mb-2">Keyboard Mapping:</h3>
-                <ul className="space-y-1 ml-4 text-sm">
-                  <li>• <strong>Row 0-3:</strong> 1-8, QWERTY, ASDF, ZXCV</li>
-                  <li>• <strong>Row 5:</strong> !@#$%^&* (Shift + 1-8)</li>
-                  <li>• <strong>STOP:</strong> ASDFGHJK (uppercase)</li>
-                  <li>• <strong>MUTE:</strong> ZXCVBNM&lt; (uppercase)</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-2">Sound Types:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• <span className="text-orange-400">Orange</span>: Drums (loops)</li>
-                  <li>• <span className="text-green-400">Green</span>: Bass (loops)</li>
-                  <li>• <span className="text-purple-400">Purple</span>: Melodic (loops)</li>
-                  <li>• <span className="text-cyan-400">Cyan</span>: FX (one-shots)</li>
-                  <li>• <span className="text-pink-400">Pink</span>: Vocals (one-shots)</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-2">Deck Controls:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">9</kbd> Play/Pause left deck</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">O</kbd> Play/Pause right deck</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">L</kbd> Next track</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">.</kbd> Toggle queue</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">~</kbd> Toggle BPM guide</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-2">Crossfader Controls:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">[</kbd> Move crossfader left</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">]</kbd> Move crossfader right</li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-semibold text-white mb-2">AI Assistant:</h3>
-                <ul className="space-y-1 ml-4">
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">+</kbd> Toggle AI assistant menu</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">-</kbd> Toggle voice listening (when AI open)</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Backspace</kbd> Cancel AI search</li>
-                  <li>• Say "Can you play [song name]" to search and download</li>
-                </ul>
+
+              {/* Right Column */}
+              <div className="space-y-3">
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Keyboard Mapping:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <strong>Rows 0-3:</strong> 1-8, QWERTY, ASDF, ZXCV</li>
+                    <li>• <strong>Row 4:</strong> !@#$%^&* (Shift + 1-8)</li>
+                    <li>• <strong>STOP:</strong> QWERTYUO (uppercase)</li>
+                    <li>• <strong>MUTE:</strong> ASDFGHJL (uppercase)</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">Crossfader:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">[</kbd> Move left</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">]</kbd> Move right</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">AI Assistant:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">+</kbd> Toggle AI menu</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">-</kbd> Toggle voice listening</li>
+                    <li>• Say "Can you play [song]"</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-1">View Controls:</h3>
+                  <ul className="space-y-0.5 ml-3 text-xs">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">?</kbd> Toggle help</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">~</kbd> Toggle BPM guide</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">.</kbd> Toggle queue</li>
+                  </ul>
+                </div>
               </div>
             </div>
-            <button
-              onClick={() => setShowHelp(false)}
-              className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
-              Close
-            </button>
           </div>
         </div>
       )}
