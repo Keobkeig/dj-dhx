@@ -1,4 +1,3 @@
-import React from 'react'
 import '../App.css'
 
 interface Track {
@@ -17,31 +16,38 @@ export default function VinylRecord({ track }: VinylRecordProps) {
   console.log('Rendering VinylRecord for track:', track.title, track.playing)
 
   return (
-    <div className="relative">
-      <div
-        className={`
-          w-64 h-64 rounded-full bg-black border-8 border-gray-800 relative overflow-hidden shadow-2xl
-          ${track.playing ? 'animate-spin' : ''}
-        `}
-        style={{ animationDuration: '2s' }}
-      >
-        {/* Vinyl grooves - more pronounced */}
-        <div className="absolute inset-4 rounded-full border-2 border-gray-600 opacity-70" />
-        <div className="absolute inset-8 rounded-full border border-gray-650 opacity-60" />
-        <div className="absolute inset-12 rounded-full border border-gray-700 opacity-50" />
-        <div className="absolute inset-16 rounded-full border border-gray-750 opacity-40" />
-        <div className="absolute inset-20 rounded-full border border-gray-800 opacity-30" />
+    <div className="relative group">
+      {/* Container that clips the vinyl to show only half - vertical half */}
+      <div className="w-48 h-96 overflow-hidden relative">
+        <div
+          className={`
+            w-96 h-96 rounded-full bg-black border-8 border-gray-800 relative shadow-2xl
+            ${track.playing ? 'animate-spin' : ''}
+          `}
+          style={{
+            animationDuration: '2s',
+            position: 'absolute',
+            top: '0',
+            left: track.position === 'left' ? '0' : '-192px'
+          }}
+        >
+          {/* Vinyl grooves - more pronounced */}
+          <div className="absolute inset-6 rounded-full border-2 border-gray-600 opacity-70" />
+          <div className="absolute inset-12 rounded-full border border-gray-650 opacity-60" />
+          <div className="absolute inset-16 rounded-full border border-gray-700 opacity-50" />
+          <div className="absolute inset-20 rounded-full border border-gray-750 opacity-40" />
+          <div className="absolute inset-24 rounded-full border border-gray-800 opacity-30" />
+          <div className="absolute inset-28 rounded-full border border-gray-850 opacity-25" />
 
-        {/* Center label with track info - adjusted for larger size */}
-        <div className="absolute inset-24 rounded-full bg-red-600 flex flex-col items-center justify-center text-white text-center p-2">
-          <div className="text-[10px] font-bold truncate w-full leading-tight">{track.title}</div>
-          <div className="text-[8px] truncate w-full opacity-80">{track.artist}</div>
-          <div className="w-1.5 h-1.5 rounded-full bg-black mt-1" />
+          {/* Center label - just the center hole */}
+          <div className="absolute inset-32 rounded-full bg-red-600 flex flex-col items-center justify-center text-white text-center p-3">
+            <div className="w-2 h-2 rounded-full bg-black" />
+          </div>
+
+          {/* Enhanced reflection effect */}
+          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/20 via-white/5 to-transparent" />
+          <div className="absolute top-6 left-6 w-24 h-24 rounded-full bg-gradient-to-br from-white/15 to-transparent blur-sm" />
         </div>
-
-        {/* Enhanced reflection effect */}
-        <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/20 via-white/5 to-transparent" />
-        <div className="absolute top-4 left-4 w-16 h-16 rounded-full bg-gradient-to-br from-white/15 to-transparent blur-sm" />
       </div>
 
       {/* Track info */}

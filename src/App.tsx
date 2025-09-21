@@ -3,7 +3,9 @@ import './App.css'
 import PulsatingButton from '@/components/ui/pulsating-button'
 import VinylRecord from '@/components/VinylRecord'
 import { SongProgress } from '@/components/SongProgress'
-import { Upload, Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
+import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
+import { audioAnalyzer } from './utils/audioAnalysis'
+import type { AudioAnalysisResult } from './utils/audioAnalysis'
 
 type PadType = 'drums' | 'bass' | 'melodic' | 'fx' | 'vocal' | 'perc' | 'stop' | 'mute'
 
@@ -30,18 +32,22 @@ interface Track {
   duration?: number
   currentTime?: number
   bpm?: number
+  key?: string
+  volume?: number
+  analyzing?: boolean
 }
 
 function App() {
   const [pads, setPads] = useState<Pad[]>([])
   const [tracks, setTracks] = useState<Track[]>([
-    { id: '1', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'left', bpm: 120 },
-    { id: '2', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'right', bpm: 120 }
+    { id: '1', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'left', bpm: 120, key: 'C', volume: 1.0 },
+    { id: '2', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'right', bpm: 120, key: 'C', volume: 1.0 }
   ])
   const [loadedTracks, setLoadedTracks] = useState<Track[]>([])
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0)
-  const [songProgress, setSongProgress] = useState({ currentTime: 0, duration: 0 })
-  const [activeChannels, setActiveChannels] = useState<boolean[]>(new Array(8).fill(false))
+  const [leftSongProgress, setLeftSongProgress] = useState({ currentTime: 0, duration: 0 })
+  const [rightSongProgress, setRightSongProgress] = useState({ currentTime: 0, duration: 0 })
+  const [, setActiveChannels] = useState<boolean[]>(new Array(8).fill(false))
   const [mutedChannels, setMutedChannels] = useState<boolean[]>(new Array(8).fill(false))
   const [shiftPressed, setShiftPressed] = useState<boolean>(false)
   const [pressedPads, setPressedPads] = useState<Set<string>>(new Set())
@@ -49,17 +55,40 @@ function App() {
   const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map())
   const [showHelp, setShowHelp] = useState<boolean>(false)
   const [showQueue, setShowQueue] = useState<boolean>(true)
-  const [mainTrackAudio, setMainTrackAudio] = useState<HTMLAudioElement | null>(null)
+  const [leftDeckAudio, setLeftDeckAudio] = useState<HTMLAudioElement | null>(null)
+  const [rightDeckAudio, setRightDeckAudio] = useState<HTMLAudioElement | null>(null)
   const [showBpmGuide, setShowBpmGuide] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentDeck, setCurrentDeck] = useState<'left' | 'right'>('left')
-  const [queueSongs] = useState([
+  const [, ] = useState([
     { title: "Uptown Funk", artist: "Bruno Mars", status: "playing" },
     { title: "Good 4 U", artist: "Olivia Rodrigo", status: "queued" },
     { title: "Blinding Lights", artist: "The Weeknd", status: "queued" },
     { title: "Levitating", artist: "Dua Lipa", status: "queued" },
     { title: "Stay", artist: "The Kid LAROI", status: "queued" }
   ])
+  const [masterVolume, ] = useState<number>(0.8)
+  const [crossfaderPosition, setCrossfaderPosition] = useState<number>(0.5) // 0 = full left, 1 = full right, 0.5 = center
+
+  // Calculate individual track volumes based on crossfader position
+  const leftTrackVolume = masterVolume * (1 - Math.max(0, (crossfaderPosition - 0.5) * 2))
+  const rightTrackVolume = masterVolume * (1 - Math.max(0, (0.5 - crossfaderPosition) * 2))
+
+  // Update track volumes when crossfader changes
+  useEffect(() => {
+    if (leftDeckAudio) {
+      leftDeckAudio.volume = leftTrackVolume
+    }
+    if (rightDeckAudio) {
+      rightDeckAudio.volume = rightTrackVolume
+    }
+
+    // Update track state volumes
+    setTracks(prev => prev.map(track => ({
+      ...track,
+      volume: track.position === 'left' ? leftTrackVolume / masterVolume : rightTrackVolume / masterVolume
+    })))
+  }, [crossfaderPosition, masterVolume, leftDeckAudio, rightDeckAudio, leftTrackVolume, rightTrackVolume])
 
   // 8x8 keyboard mapping - each row has unique keys to avoid conflicts (updated)
   const keyMap: { [key: string]: string } = {
@@ -88,10 +117,10 @@ function App() {
     const audio = new Audio(soundFile)
     audio.preload = 'auto'
     audio.loop = true
-    audio.volume = 0.7
+    audio.volume = masterVolume
 
     setAudioElements(prev => new Map(prev.set(soundFile, audio)))
-  }, [audioElements])
+  }, [audioElements, masterVolume])
 
   const playAudio = useCallback((soundFile: string, isOneShot: boolean = false) => {
     if (!soundFile || globalPaused) return
@@ -99,7 +128,7 @@ function App() {
     if (isOneShot) {
       // For one-shots, always create a new audio instance so they can overlap
       const newAudio = new Audio(soundFile)
-      newAudio.volume = 0.7
+      newAudio.volume = masterVolume
       newAudio.loop = false
       // Clean up the audio element when it finishes playing
       newAudio.addEventListener('ended', () => {
@@ -111,7 +140,7 @@ function App() {
       const audio = audioElements.get(soundFile)
       if (!audio) {
         const newAudio = new Audio(soundFile)
-        newAudio.volume = 0.7
+        newAudio.volume = masterVolume
         newAudio.loop = true
         setAudioElements(prev => new Map(prev.set(soundFile, newAudio)))
         newAudio.play().catch(console.error)
@@ -121,7 +150,7 @@ function App() {
         audio.play().catch(console.error)
       }
     }
-  }, [audioElements, globalPaused])
+  }, [audioElements, globalPaused, masterVolume])
 
   // BPM Guide data based on energy building chart
   const bpmGuide = [
@@ -132,262 +161,238 @@ function App() {
   ]
 
   // File handling functions
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>, position: 'left' | 'right') => {
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>, position: 'left' | 'right') => {
     const files = event.target.files
     if (!files || files.length === 0) return
 
     const newTracks: Track[] = []
     let loadedCount = 0
 
-    Array.from(files).forEach((file, index) => {
+    for (const [index, file] of Array.from(files).entries()) {
       const isMP3 = file.type === 'audio/mp3' ||
                    file.type === 'audio/mpeg' ||
                    file.name.toLowerCase().endsWith('.mp3')
 
       if (!isMP3) {
         alert(`${file.name} is not an MP3 file`)
-        return
+        continue
       }
 
       const url = URL.createObjectURL(file)
       const audio = new Audio(url)
 
-      audio.addEventListener('loadedmetadata', () => {
-        const fileName = file.name.replace('.mp3', '')
-        const parts = fileName.split(' - ')
-        const title = parts.length > 1 ? parts[1] : fileName
-        const artist = parts.length > 1 ? parts[0] : 'Unknown Artist'
+      const fileName = file.name.replace('.mp3', '')
+      const parts = fileName.split(' - ')
+      const title = parts.length > 1 ? parts[1] : fileName
+      const artist = parts.length > 1 ? parts[0] : 'Unknown Artist'
 
-        const newTrack: Track = {
-          id: `loaded-${Date.now()}-${index}`,
-          title,
-          artist,
-          playing: false,
-          position: 'left',
-          audioFile: url,
-          duration: audio.duration,
-          currentTime: 0,
-          bpm: 120
-        }
+      // Create initial track with analyzing flag
+      const newTrack: Track = {
+        id: `loaded-${Date.now()}-${index}`,
+        title,
+        artist,
+        playing: false,
+        position: position, // Use the upload position instead of hardcoded 'left'
+        audioFile: url,
+        duration: 0,
+        currentTime: 0,
+        bpm: 120,
+        key: 'C',
+        volume: 1.0,
+        analyzing: true
+      }
 
-        newTracks.push(newTrack)
-        loadedCount++
+      await new Promise<void>((resolve) => {
+        audio.addEventListener('loadedmetadata', async () => {
+          newTrack.duration = audio.duration
 
-        if (loadedCount === files.length) {
-          setLoadedTracks(prev => [...prev, ...newTracks])
-          if (newTracks.length > 0) {
-            const firstTrack = newTracks[0]
-            setTracks(prev => prev.map(track =>
-              track.position === position
-                ? { ...firstTrack, position }
-                : track
-            ))
-            setCurrentTrackIndex(loadedTracks.length) // Set to the first of the newly loaded tracks
+          try {
+            // Analyze the audio file for BPM and key
+            const analysis: AudioAnalysisResult = await audioAnalyzer.analyzeFile(file)
+            newTrack.bpm = analysis.bpm
+            newTrack.key = analysis.key
+            newTrack.analyzing = false
+          } catch (error) {
+            console.error('Audio analysis failed:', error)
+            // Keep default values if analysis fails
+            newTrack.analyzing = false
           }
-        }
+
+          newTracks.push(newTrack)
+          loadedCount++
+
+          if (loadedCount === files.length) {
+            setLoadedTracks(prev => [...prev, ...newTracks])
+            if (newTracks.length > 0) {
+              const firstTrack = newTracks[0]
+              setTracks(prev => prev.map(track =>
+                track.position === position
+                  ? { ...firstTrack, position, playing: false }
+                  : track
+              ))
+              setCurrentTrackIndex(loadedTracks.length)
+            }
+          }
+          resolve()
+        })
       })
-    })
+    }
 
     // Reset file input
     event.target.value = ''
   }, [loadedTracks])
 
-  const togglePlayPause = useCallback(() => {
-    // Check if any track is currently playing
-    const playingTrack = tracks.find(t => t.playing)
+  const togglePlayPause = useCallback((position?: 'left' | 'right') => {
+    // If no position specified, use the current deck
+    const targetPosition = position || currentDeck
+    const deckAudio = targetPosition === 'left' ? leftDeckAudio : rightDeckAudio
+    const setDeckAudio = targetPosition === 'left' ? setLeftDeckAudio : setRightDeckAudio
+    const targetTrack = tracks.find(t => t.position === targetPosition)
 
-    if (mainTrackAudio) {
-      if (!mainTrackAudio.paused) {
+    // If we have an existing audio element for this deck, use it for pause/resume
+    if (deckAudio && targetTrack?.audioFile) {
+      if (!deckAudio.paused) {
         // Currently playing - pause it
-        mainTrackAudio.pause()
-        setTracks(prev => prev.map(track => ({ ...track, playing: false })))
+        deckAudio.pause()
+        setTracks(prev => prev.map(track =>
+          track.position === targetPosition ? { ...track, playing: false } : track
+        ))
       } else {
         // Currently paused - resume it
-        mainTrackAudio.play().catch(console.error)
+        deckAudio.play().catch(console.error)
         setTracks(prev => prev.map(track =>
-          track.id === playingTrack?.id ? { ...track, playing: true } : track
+          track.position === targetPosition ? { ...track, playing: true } : track
         ))
       }
       return
     }
 
-    // If no mainTrackAudio but we have loaded tracks, try to start from loadedTracks
-    if (loadedTracks.length === 0) {
-      alert('No tracks loaded. Please load MP3 files first.')
+    // If no audio for this deck, create one for the target track
+    if (!targetTrack?.audioFile) {
+      alert(`No track loaded on ${targetPosition} deck. Please load an MP3 file first.`)
       return
     }
 
-    const currentTrack = loadedTracks[currentTrackIndex]
-    if (!currentTrack?.audioFile) return
+    // Create new audio for this deck
+    const newAudio = new Audio(targetTrack.audioFile)
+    newAudio.volume = targetPosition === 'left' ? leftTrackVolume : rightTrackVolume
 
-    const activePosition = tracks.find(t => t.playing)?.position || 'left'
-
-    // Start new audio
-    const newAudio = new Audio(currentTrack.audioFile)
-    newAudio.volume = 0.8
-
+    // Set up event listeners
     newAudio.addEventListener('timeupdate', () => {
-      setSongProgress({
+      const progressData = {
         currentTime: newAudio.currentTime,
         duration: newAudio.duration || 0
-      })
+      }
+
+      if (targetPosition === 'left') {
+        setLeftSongProgress(progressData)
+      } else {
+        setRightSongProgress(progressData)
+      }
+
       setTracks(prev => prev.map(t =>
-        t.id === currentTrack.id
+        t.position === targetPosition
           ? { ...t, currentTime: newAudio.currentTime }
           : t
       ))
     })
 
     newAudio.addEventListener('loadedmetadata', () => {
-      setSongProgress({
+      const progressData = {
         currentTime: 0,
         duration: newAudio.duration || 0
-      })
+      }
+
+      if (targetPosition === 'left') {
+        setLeftSongProgress(progressData)
+      } else {
+        setRightSongProgress(progressData)
+      }
     })
 
     newAudio.addEventListener('ended', () => {
-      // Auto advance to next track when song ends
-      const nextIndex = (currentTrackIndex + 1) % loadedTracks.length
-      setCurrentTrackIndex(nextIndex)
-      const nextTrackData = loadedTracks[nextIndex]
-      if (nextTrackData?.audioFile) {
-        const autoAudio = new Audio(nextTrackData.audioFile)
-        autoAudio.volume = 0.8
-        setMainTrackAudio(autoAudio)
-        autoAudio.play().catch(console.error)
+      // Track ended - stop playing state for this deck only
+      setTracks(prev => prev.map(track =>
+        track.position === targetPosition ? { ...track, playing: false } : track
+      ))
+
+      const endProgressData = { currentTime: 0, duration: newAudio.duration || 0 }
+      if (targetPosition === 'left') {
+        setLeftSongProgress(endProgressData)
+      } else {
+        setRightSongProgress(endProgressData)
       }
     })
 
-    setMainTrackAudio(newAudio)
+    // Set this as the deck audio and start playing
+    setDeckAudio(newAudio)
     newAudio.play().catch(console.error)
 
-    setTracks(prev => prev.map(track => {
-      if (track.position === activePosition) {
-        return { ...currentTrack, position: activePosition, playing: true }
-      }
-      return { ...track, playing: false }
-    }))
-  }, [loadedTracks, currentTrackIndex, mainTrackAudio, tracks])
+    // Update track states
+    setTracks(prev => prev.map(track =>
+      track.position === targetPosition ? { ...track, playing: true } : track
+    ))
+  }, [currentDeck, leftDeckAudio, rightDeckAudio, tracks, leftTrackVolume, rightTrackVolume])
 
   const nextTrack = useCallback(() => {
     if (loadedTracks.length === 0) return
 
-    const wasPlaying = tracks.some(t => t.playing)
     const nextIndex = (currentTrackIndex + 1) % loadedTracks.length
     setCurrentTrackIndex(nextIndex)
-
     const nextTrackData = loadedTracks[nextIndex]
-    const activePosition = tracks.find(t => t.playing)?.position || 'left'
 
-    // Stop current audio
-    if (mainTrackAudio) {
-      mainTrackAudio.pause()
-      mainTrackAudio.currentTime = 0
-    }
-
-    // Update tracks display
+    // Update the current deck with the new track (don't change playing state)
     setTracks(prev => prev.map(track =>
-      track.position === activePosition
-        ? { ...nextTrackData, position: activePosition, playing: false }
-        : { ...track, playing: false }
+      track.position === currentDeck ? { ...nextTrackData, position: currentDeck, playing: false } : track
     ))
 
-    // Auto-play if something was playing
-    if (wasPlaying && nextTrackData?.audioFile) {
-      setTimeout(() => {
-        const newAudio = new Audio(nextTrackData.audioFile)
-        newAudio.volume = 0.8
+    // Stop current deck audio if playing
+    const deckAudio = currentDeck === 'left' ? leftDeckAudio : rightDeckAudio
+    const setDeckAudio = currentDeck === 'left' ? setLeftDeckAudio : setRightDeckAudio
 
-        newAudio.addEventListener('timeupdate', () => {
-          setSongProgress({
-            currentTime: newAudio.currentTime,
-            duration: newAudio.duration || 0
-          })
-        })
-
-        newAudio.addEventListener('loadedmetadata', () => {
-          setSongProgress({
-            currentTime: 0,
-            duration: newAudio.duration || 0
-          })
-        })
-
-        newAudio.addEventListener('ended', () => {
-          nextTrack()
-        })
-
-        setMainTrackAudio(newAudio)
-        newAudio.play().catch(console.error)
-
-        setTracks(prev => prev.map(track =>
-          track.position === activePosition
-            ? { ...track, playing: true }
-            : track
-        ))
-      }, 100)
+    if (deckAudio) {
+      deckAudio.pause()
+      deckAudio.currentTime = 0
+      setDeckAudio(null)
     }
-  }, [loadedTracks, currentTrackIndex, tracks, mainTrackAudio])
+
+    // Reset progress for the current deck
+    if (currentDeck === 'left') {
+      setLeftSongProgress({ currentTime: 0, duration: 0 })
+    } else {
+      setRightSongProgress({ currentTime: 0, duration: 0 })
+    }
+  }, [loadedTracks, currentTrackIndex, currentDeck, leftDeckAudio, rightDeckAudio])
 
   const prevTrack = useCallback(() => {
     if (loadedTracks.length === 0) return
 
-    const wasPlaying = tracks.some(t => t.playing)
     const prevIndex = currentTrackIndex === 0 ? loadedTracks.length - 1 : currentTrackIndex - 1
     setCurrentTrackIndex(prevIndex)
-
     const prevTrackData = loadedTracks[prevIndex]
-    const activePosition = tracks.find(t => t.playing)?.position || 'left'
 
-    // Stop current audio
-    if (mainTrackAudio) {
-      mainTrackAudio.pause()
-      mainTrackAudio.currentTime = 0
-    }
-
-    // Update tracks display
+    // Update the current deck with the new track (don't change playing state)
     setTracks(prev => prev.map(track =>
-      track.position === activePosition
-        ? { ...prevTrackData, position: activePosition, playing: false }
-        : { ...track, playing: false }
+      track.position === currentDeck ? { ...prevTrackData, position: currentDeck, playing: false } : track
     ))
 
-    // Auto-play if something was playing
-    if (wasPlaying && prevTrackData?.audioFile) {
-      setTimeout(() => {
-        const newAudio = new Audio(prevTrackData.audioFile)
-        newAudio.volume = 0.8
+    // Stop current deck audio if playing
+    const deckAudio = currentDeck === 'left' ? leftDeckAudio : rightDeckAudio
+    const setDeckAudio = currentDeck === 'left' ? setLeftDeckAudio : setRightDeckAudio
 
-        newAudio.addEventListener('timeupdate', () => {
-          setSongProgress({
-            currentTime: newAudio.currentTime,
-            duration: newAudio.duration || 0
-          })
-        })
-
-        newAudio.addEventListener('loadedmetadata', () => {
-          setSongProgress({
-            currentTime: 0,
-            duration: newAudio.duration || 0
-          })
-        })
-
-        newAudio.addEventListener('ended', () => {
-          // Auto advance to next track
-          const nextIndex = (prevIndex + 1) % loadedTracks.length
-          setCurrentTrackIndex(nextIndex)
-        })
-
-        setMainTrackAudio(newAudio)
-        newAudio.play().catch(console.error)
-
-        setTracks(prev => prev.map(track =>
-          track.position === activePosition
-            ? { ...track, playing: true }
-            : track
-        ))
-      }, 100)
+    if (deckAudio) {
+      deckAudio.pause()
+      deckAudio.currentTime = 0
+      setDeckAudio(null)
     }
-  }, [loadedTracks, currentTrackIndex, tracks, mainTrackAudio])
+
+    // Reset progress for the current deck
+    if (currentDeck === 'left') {
+      setLeftSongProgress({ currentTime: 0, duration: 0 })
+    } else {
+      setRightSongProgress({ currentTime: 0, duration: 0 })
+    }
+  }, [loadedTracks, currentTrackIndex, currentDeck, leftDeckAudio, rightDeckAudio])
 
   const handleVinylClick = useCallback((position: 'left' | 'right') => {
     const track = tracks.find(t => t.position === position)
@@ -397,7 +402,8 @@ function App() {
       return
     }
 
-    togglePlayPause()
+    // Toggle play/pause for the specific deck
+    togglePlayPause(position)
   }, [tracks, togglePlayPause])
 
   const stopAudio = useCallback((soundFile: string) => {
@@ -551,7 +557,23 @@ function App() {
       // Toggle mute for this channel
       setMutedChannels(prev => {
         const newMuted = [...prev]
-        newMuted[pad.channel] = !newMuted[pad.channel]
+        const willBeMuted = !newMuted[pad.channel]
+        newMuted[pad.channel] = willBeMuted
+
+        // Pause or resume all active audio in this channel
+        pads.forEach(p => {
+          if (p.channel === pad.channel && p.active && p.soundFile) {
+            const audio = audioElements.get(p.soundFile)
+            if (audio) {
+              if (willBeMuted) {
+                audio.pause()
+              } else {
+                audio.play().catch(console.error)
+              }
+            }
+          }
+        })
+
         return newMuted
       })
     } else {
@@ -587,7 +609,7 @@ function App() {
         })
       }
     }
-  }, [stopAudio, playAudio, mutedChannels])
+  }, [stopAudio, playAudio, mutedChannels, pads, audioElements])
 
   // Keyboard event handling
   useEffect(() => {
@@ -630,16 +652,29 @@ function App() {
         return
       }
 
-      // Handle main track playback controls
+      // Handle crossfader controls with [ and ]
+      if (key === '[') {
+        event.preventDefault()
+        setCrossfaderPosition(prev => Math.max(0, prev - 0.1)) // Move left
+        return
+      }
+
+      if (key === ']') {
+        event.preventDefault()
+        setCrossfaderPosition(prev => Math.min(1, prev + 0.1)) // Move right
+        return
+      }
+
+      // Handle deck-specific playback controls
       if (key === '9') {
         event.preventDefault()
-        togglePlayPause()
+        togglePlayPause('left')
         return
       }
 
       if (key === 'o') {
         event.preventDefault()
-        prevTrack()
+        togglePlayPause('right')
         return
       }
 
@@ -720,12 +755,13 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4 overflow-hidden">
-      {/* Song Progress Bar */}
+    <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
+      {/* Dual Progress Bars */}
       <SongProgress
-        currentTime={songProgress.currentTime}
-        duration={songProgress.duration}
-        isPlaying={tracks.some(t => t.playing)}
+        leftProgress={leftSongProgress}
+        rightProgress={rightSongProgress}
+        leftPlaying={tracks.find(t => t.position === 'left')?.playing || false}
+        rightPlaying={tracks.find(t => t.position === 'right')?.playing || false}
       />
       {/* Header */}
       <div className="flex items-center justify-center w-full mb-4">
@@ -735,6 +771,45 @@ function App() {
           </div>
           <h1 className="text-4xl font-bold tracking-wider futuristic-font">DHX</h1>
           {/* <span className="ml-4 px-3 py-1 bg-gray-700 rounded text-sm">INTRO</span> */}
+        </div>
+      </div>
+
+      {/* Crossfader - Below logo */}
+      <div className="flex flex-col items-center mb-6">
+        <div className="text-white text-xs mb-2 futuristic-font">CROSSFADER</div>
+        <div className="relative w-64 h-4 bg-gray-800 rounded-full">
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value={crossfaderPosition}
+            onChange={(e) => setCrossfaderPosition(parseFloat(e.target.value))}
+            className="absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer"
+          />
+          <div
+            className="absolute w-6 h-6 bg-white rounded-full border-2 border-gray-600 pointer-events-none transform -translate-y-1"
+            style={{
+              left: `${crossfaderPosition * (256 - 24)}px`
+            }}
+          />
+        </div>
+        <div className="flex justify-between w-full mt-1 text-[10px] text-gray-400">
+          <div className="flex flex-col items-center">
+            <span>LEFT</span>
+            {shiftPressed && (
+              <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">[</kbd>
+            )}
+          </div>
+          <span className="text-gray-300 text-xs">
+            {crossfaderPosition < 0.4 ? 'LEFT' : crossfaderPosition > 0.6 ? 'RIGHT' : 'CENTER'}
+          </span>
+          <div className="flex flex-col items-center">
+            <span>RIGHT</span>
+            {shiftPressed && (
+              <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">]</kbd>
+            )}
+          </div>
         </div>
       </div>
 
@@ -748,7 +823,7 @@ function App() {
         onChange={(e) => handleFileUpload(e, currentDeck)}
       />
 
-      <div className="flex items-center justify-center w-full max-w-7xl gap-8">
+      <div className="flex items-center justify-center w-full max-w-[1600px] gap-4 xl:gap-8 flex-wrap lg:flex-nowrap">
         {/* Left Vinyl */}
         <div className="flex-shrink-0">
           <div onClick={() => handleVinylClick('left')} className="cursor-pointer">
@@ -887,13 +962,20 @@ function App() {
                 </ul>
               </div>
               <div>
-                <h3 className="font-semibold text-white mb-2">Main Track Controls:</h3>
+                <h3 className="font-semibold text-white mb-2">Deck Controls:</h3>
                 <ul className="space-y-1 ml-4">
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">9</kbd> Play/Pause main track</li>
-                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">O</kbd> Previous track</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">9</kbd> Play/Pause left deck</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">O</kbd> Play/Pause right deck</li>
                   <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">L</kbd> Next track</li>
                   <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">.</kbd> Toggle queue</li>
                   <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">~</kbd> Toggle BPM guide</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-white mb-2">Crossfader Controls:</h3>
+                <ul className="space-y-1 ml-4">
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">[</kbd> Move crossfader left</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">]</kbd> Move crossfader right</li>
                 </ul>
               </div>
             </div>
@@ -925,21 +1007,36 @@ function App() {
           </button>
         </div>
 
-        {/* Current playing song info */}
+        {/* Current playing songs info */}
         {(() => {
-          const playingTrack = tracks.find(t => t.playing)
-          return playingTrack ? (
-            <div className="mb-4 p-3 bg-blue-600/20 rounded border border-blue-500/30">
-              <div className="text-white font-medium text-sm truncate">{playingTrack.title}</div>
-              <div className="text-gray-300 text-xs truncate">{playingTrack.artist}</div>
-              <div className="text-green-400 text-xs mt-1 flex items-center">
-                <Volume2 size={10} className="mr-1" />
-                {playingTrack.bpm} BPM • Now Playing
-              </div>
+          const playingTracks = tracks.filter(t => t.playing)
+          return playingTracks.length > 0 ? (
+            <div className="mb-4 space-y-2">
+              {playingTracks.map(track => (
+                <div key={track.id} className={`p-3 rounded border ${
+                  track.position === 'left' ? 'bg-orange-600/20 border-orange-500/30' : 'bg-purple-600/20 border-purple-500/30'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-white font-medium text-sm truncate">{track.title}</div>
+                    <div className="text-xs text-gray-300 uppercase">{track.position}</div>
+                  </div>
+                  <div className="text-gray-300 text-xs truncate">{track.artist}</div>
+                  <div className="text-green-400 text-xs mt-1 flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Volume2 size={10} className="mr-1" />
+                      {track.analyzing ? 'Analyzing...' : `${track.bpm} BPM`}
+                    </div>
+                    <div className="text-cyan-400">
+                      {track.analyzing ? '...' : `Key: ${track.key}`}
+                    </div>
+                  </div>
+                  <div className="text-green-400 text-xs">• Playing</div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="mb-4 p-3 bg-gray-800/50 rounded">
-              <div className="text-gray-400 text-xs">No track playing</div>
+              <div className="text-gray-400 text-xs">No tracks playing</div>
             </div>
           )
         })()}
@@ -977,7 +1074,7 @@ function App() {
                 <SkipBack size={12} />
               </button>
               <button
-                onClick={togglePlayPause}
+                onClick={() => togglePlayPause()}
                 className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
               >
                 {tracks.find(t => t.playing) ? <Pause size={12} /> : <Play size={12} />}
@@ -1020,12 +1117,19 @@ function App() {
               >
                 <div className="text-white text-sm font-medium truncate">{song.title}</div>
                 <div className="text-gray-400 text-xs truncate">{song.artist}</div>
-                {index === currentTrackIndex && tracks.find(t => t.playing) && (
-                  <div className="text-green-400 text-xs">● Now Playing</div>
-                )}
-                {index === currentTrackIndex && !tracks.find(t => t.playing) && (
-                  <div className="text-yellow-400 text-xs">● Current Track</div>
-                )}
+                <div className="flex items-center justify-between mt-1">
+                  <div className="text-gray-500 text-xs">
+                    {song.analyzing ? 'Analyzing...' : `${song.bpm} BPM • ${song.key}`}
+                  </div>
+                  <div className="text-xs">
+                    {index === currentTrackIndex && tracks.find(t => t.playing) && (
+                      <span className="text-green-400">● Playing</span>
+                    )}
+                    {index === currentTrackIndex && !tracks.find(t => t.playing) && (
+                      <span className="text-yellow-400">● Current</span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
             {loadedTracks.length === 0 && (
