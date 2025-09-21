@@ -17,6 +17,23 @@ export default function VinylRecord({ track }: VinylRecordProps) {
 
   return (
     <div className="relative group">
+      {/* Track info ABOVE the vinyl */}
+      <div className="mb-3 text-center w-48">
+        <div className="text-sm font-semibold truncate futuristic-font w-full">
+          {track.title}
+        </div>
+        <div className="text-xs text-gray-400 truncate futuristic-font w-full">
+          {track.artist}
+        </div>
+        <div
+          className={`text-xs mt-1 futuristic-font ${
+            track.playing ? 'text-green-400' : 'text-gray-500'
+          }`}
+        >
+          {track.playing ? 'PLAYING' : 'PAUSED'}
+        </div>
+      </div>
+
       {/* Container that clips the vinyl to show only half - vertical half */}
       <div className="w-48 h-96 overflow-hidden relative">
         <div
@@ -47,23 +64,6 @@ export default function VinylRecord({ track }: VinylRecordProps) {
           {/* Enhanced reflection effect */}
           <div className="absolute inset-0 rounded-full bg-gradient-to-br from-white/20 via-white/5 to-transparent" />
           <div className="absolute top-6 left-6 w-24 h-24 rounded-full bg-gradient-to-br from-white/15 to-transparent blur-sm" />
-        </div>
-      </div>
-
-      {/* Track info */}
-      <div className="mt-4 text-center w-48">   {/* lock width same as vinyl */}
-        <div className="text-sm font-semibold truncate futuristic-font w-full">
-          {track.title}
-        </div>
-        <div className="text-xs text-gray-400 truncate futuristic-font w-full">
-          {track.artist}
-        </div>
-        <div
-          className={`text-xs mt-1 futuristic-font ${
-            track.playing ? 'text-green-400' : 'text-gray-500'
-          }`}
-        >
-          {track.playing ? 'PLAYING' : 'PAUSED'}
         </div>
       </div>
     </div>

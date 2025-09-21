@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Mic, MicOff, X } from 'lucide-react'
+import { Mic, MicOff, X, Check } from 'lucide-react'
 
 interface AISectionProps {
   onSongRequest: (songQuery: string) => void
@@ -63,6 +63,14 @@ export const AISection: React.FC<AISectionProps> = ({
       }
     }
   }, [])
+
+  // Do NOT auto-start on open. Only stop when panel is hidden.
+  useEffect(() => {
+    if (!isVisible && isListening) {
+      console.log('AI closed - stopping listening...')
+      stopListening()
+    }
+  }, [isVisible, isListening])
 
   const initializeSpeechRecognition = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {

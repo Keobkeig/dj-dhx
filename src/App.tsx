@@ -11,7 +11,7 @@ import type { AudioAnalysisResult } from './utils/audioAnalysis'
 import { AISection } from './components/AISection'
 import { musicSearchService } from './services/spotifyService'
 import { DndContext, useDroppable, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, pointerWithin } from '@dnd-kit/core'
-import { snapCenterToCursor, restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { snapCenterToCursor } from '@dnd-kit/modifiers'
 import { useDraggable } from '@dnd-kit/core'
 import type { DragEndEvent, Modifier } from '@dnd-kit/core'
 import {
@@ -60,6 +60,8 @@ function App() {
     { id: '2', title: 'Load MP3 File', artist: 'Click to browse', playing: false, position: 'right', bpm: 120, key: 'C', volume: 1.0 }
   ])
   const [loadedTracks, setLoadedTracks] = useState<Track[]>([])
+  const [confirmTrack, setConfirmTrack] = useState<Track | null>(null)
+  const [confirmCountdown, setConfirmCountdown] = useState<number>(0)
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number>(0)
   const [leftSongProgress, setLeftSongProgress] = useState({ currentTime: 0, duration: 0 })
   const [rightSongProgress, setRightSongProgress] = useState({ currentTime: 0, duration: 0 })
@@ -86,6 +88,7 @@ function App() {
     useSensor(KeyboardSensor)
   );
   const [queueSlotOver, setQueueSlotOver] = useState<number | null>(null);
+  const CONFIRM_SECONDS = 5
   
   const [, ] = useState([
     { title: "Uptown Funk", artist: "Bruno Mars", status: "playing" },
@@ -116,6 +119,17 @@ function App() {
   };
 
 
+  useEffect(() => {
+    if (!confirmTrack) return
+    if (confirmCountdown <= 0) {
+      // auto-confirm
+      setQueue(prev => (prev.some(t => t.id === confirmTrack.id) ? prev : [...prev, confirmTrack]))
+      setConfirmTrack(null)
+      return
+    }
+    const t = setTimeout(() => setConfirmCountdown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [confirmTrack, confirmCountdown, setQueue])
 
   // Update track volumes when crossfader changes
   useEffect(() => {
@@ -155,7 +169,9 @@ function App() {
 
       // Add to loaded tracks and analyze
       setLoadedTracks(prev => [...prev, newTrack])
-      setQueue(prev => [...prev, newTrack])
+      setConfirmTrack(newTrack)
+      setConfirmCountdown(CONFIRM_SECONDS)
+
 
       // Analyze the track if it's a valid audio file
       if (result.url && result.source === 'spotify') {
@@ -192,6 +208,19 @@ function App() {
       setAiSearching(false)
     }
   }, [])
+
+  const confirmAddToQueue = () => {
+    if (!confirmTrack) return
+    setQueue(prev => (prev.some(t => t.id === confirmTrack.id) ? prev : [...prev, confirmTrack]))
+    setConfirmTrack(null)
+    setConfirmCountdown(0)
+  }
+
+  const cancelAddToQueue = () => {
+    setConfirmTrack(null)
+    setConfirmCountdown(0)
+  }
+
 
   // Handle cancelling AI requests
   const handleCancelRequest = useCallback(() => {
@@ -1232,11 +1261,11 @@ function App() {
         style={style}
         {...attributes}
         {...listeners}
-        className="w-full min-w-0 overflow-hidden p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 cursor-grab select-none border border-transparent"
+        className="w-full max-w-full min-w-0 overflow-hidden p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 cursor-grab select-none border border-transparent box-border"
         title={`${track.title} — ${track.artist}`}
       >
-        <div className="text-white text-sm font-medium truncate whitespace-nowrap">{track.title}</div>
-        <div className="text-gray-400 text-xs truncate whitespace-nowrap">{track.artist}</div>
+        <div className="text-white text-sm font-medium truncate whitespace-nowrap min-w-0 block">{track.title}</div>
+        <div className="text-gray-400 text-xs truncate whitespace-nowrap min-w-0 block">{track.artist}</div>
         <div className="text-gray-500 text-xs">{track.bpm} BPM • {track.key}</div>
       </div>
     )
@@ -1429,16 +1458,16 @@ function App() {
       : {};
 
     return (
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        {...listeners}
-        className="p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 select-none border border-transparent"
-        title={`${track.title} — ${track.artist}`}
-      >
-        <div className="text-white text-sm font-medium truncate">{track.title}</div>
-        <div className="text-gray-400 text-xs truncate">{track.artist}</div>
+        <div
+          ref={setNodeRef}
+          style={style}
+          {...attributes}
+          {...listeners}
+          className="w-full max-w-full min-w-0 overflow-hidden p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 select-none border border-transparent box-border"
+          title={`${track.title} — ${track.artist}`}
+        >
+        <div className="text-white text-sm font-medium truncate whitespace-nowrap min-w-0 block">{track.title}</div>
+        <div className="text-gray-400 text-xs truncate whitespace-nowrap min-w-0 block">{track.artist}</div>
       </div>
     )
   }
@@ -1482,7 +1511,7 @@ function App() {
             {...listeners}
             {...attributes}
             onClick={(e) => e.stopPropagation()} // don't trigger the vinyl click
-            className={`absolute top-2 ${cornerClass} z-10 rounded px-1.5 py-0.5 text-xs
+            className={`absolute top-8 ${cornerClass} z-10 rounded px-1.5 py-0.5 text-xs
                         bg-gray-800/70 hover:bg-gray-700/70 cursor-grab select-none`}
           >
             ⋮⋮
@@ -1555,7 +1584,23 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
         const m = String(over.id).match(/^queue-slot-(\d+)$/);
         setQueueSlotOver(m ? parseInt(m[1], 10) : null);
       }}
+      onDragStart={(evt) => {
+        const from = evt.active.data?.current?.from as
+          | 'queue'
+          | 'deck-left'
+          | 'deck-right'
+          | 'finished'
+          | undefined;
+
+        // Only show an overlay for deck/finished drags (not queue reorders)
+        if (from && from !== 'queue') {
+          setDragging({ track: (evt.active.data?.current as any)?.track });
+        } else {
+          setDragging(null);
+        }
+      }}
       onDragEnd={(evt) => {
+        setDragging(null);
         const { active, over } = evt;
         const slotMatch = over ? String(over.id).match(/^queue-slot-(\d+)$/) : null;
         const insertAt = slotMatch ? parseInt(slotMatch[1], 10) : null;
@@ -1595,7 +1640,7 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
           return;
         }
       }}
-      onDragCancel={() => setQueueSlotOver(null)}
+      onDragCancel={() => { setQueueSlotOver(null); setDragging(null); }}
       >
       <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
         {/* Dual Progress Bars */}
@@ -1662,6 +1707,34 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
           isSearching={aiSearching}
           isVisible={showAI}
         />
+        {confirmTrack && (
+          <div className="fixed top-28 right-4 z-50 w-80 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-white text-sm futuristic-font">Add to Queue?</div>
+              <div className="text-xs text-gray-400 futuristic-font">Auto in {confirmCountdown}s</div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="w-full h-1.5 bg-gray-700 rounded overflow-hidden mb-3">
+              <div
+                className="h-full bg-green-500 transition-all duration-700"
+                style={{ width: `${Math.max(0, (confirmCountdown / CONFIRM_SECONDS) * 100)}%` }}
+              />
+            </div>
+
+            <div className="text-xs text-gray-300 truncate mb-3 futuristic-font" title={`${confirmTrack.title} — ${confirmTrack.artist}`}>
+              {confirmTrack.title} — {confirmTrack.artist}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={confirmAddToQueue} className="flex-1 py-2 px-3 rounded-md text-xs font-medium bg-green-600 hover:bg-green-700 text-white futuristic-font">
+                Confirm
+              </button>
+              <button onClick={cancelAddToQueue} className="flex-1 py-2 px-3 rounded-md text-xs font-medium bg-gray-700 hover:bg-gray-600 text-white futuristic-font">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Hidden file input */}
         <input
@@ -1926,7 +1999,7 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
 
         {/* Song Queue Box - Bottom Right */}
         <div
-          className={`fixed bottom-4 right-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+            className={`fixed bottom-4 right-4 w-[20rem] min-w-[20rem] max-w-[20rem] overflow-hidden z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
             showQueue
               ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
               : 'translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
@@ -1950,16 +2023,15 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
             </div>
           </div>
 
-          <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-
+          <div className="space-y-4 max-h-80 overflow-y-auto overflow-x-hidden pr-1 min-w-0">
           {/* Currently Playing */}
           <section>
             <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">Currently Playing</div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 min-w-0">
               {[leftDeckTrack, rightDeckTrack].filter(Boolean).map(t => (
-                <div key={(t as Track).id} className="p-2 rounded bg-green-700/20 border border-green-500/30">
-                  <div className="text-white text-sm font-medium truncate">{(t as Track).title}</div>
-                  <div className="text-gray-300 text-xs truncate">{(t as Track).artist}</div>
+                <div key={(t as Track).id} className="w-full max-w-full min-w-0 overflow-hidden p-2 rounded bg-green-700/20 border border-green-500/30 box-border">
+                  <div className="text-white text-sm font-medium truncate whitespace-nowrap min-w-0 block">{(t as Track).title}</div>
+                  <div className="text-gray-300 text-xs truncate whitespace-nowrap min-w-0 block">{(t as Track).artist}</div>
                   <div className="text-green-400 text-xs mt-1">
                     {(t as Track).playing ? '● Playing' : '⏸ Paused'} on {(t as Track).position.toUpperCase()}
                   </div>
@@ -1976,10 +2048,11 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
             <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">In Queue</div>
 
             {/* No outer droppable container here */}
-            <SortableContext
-              items={visibleQueue.map(t => t.id)}
-              strategy={verticalListSortingStrategy}
-            >
+            <div className="min-w-0">
+              <SortableContext
+                items={visibleQueue.map(t => t.id)}
+                strategy={verticalListSortingStrategy}
+              >
               {/* slot at index 0 (top) */}
               <QueueInsertSlot index={0} active={queueSlotOver === 0} />
 
@@ -1991,12 +2064,13 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
                 </React.Fragment>
               ))}
             </SortableContext>
+            </div>
           </section>
 
           {/* Recently Finished (draggable into queue) */}
           <section>
             <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">Recently Finished</div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 min-w-0">
               {visibleFinished.length === 0 && (
                 <div className="text-gray-500 text-xs">Nothing yet</div>
               )}
@@ -2009,7 +2083,7 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
           </div>
         </div>  
       </div>
-    <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor, restrictToVerticalAxis]}>
+    <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor]}>
       {dragging?.track ? <MiniVinylRecord track={dragging.track} compact /> : null}
     </DragOverlay>
   </DndContext>
