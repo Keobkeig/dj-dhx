@@ -836,7 +836,7 @@ function App() {
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Jay Z).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
-        '/Coffee Shop Loop Kit/Hot Pot Coffee - C# Major 85 BPM/Hot Pot Coffee - C# Major 85 BPM Pad.wav'
+        '/Coffee Shop Loop Kit/Foggy Dreams - C Major 85 BPM/Foggy Dreams - C Major 85 BPM Epiano.wav'
       ],
 
       // Column 7: Full Songs (Cyan - FULL TRACKS)
@@ -847,7 +847,7 @@ function App() {
         '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Full.wav',
         '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Full.wav',
         '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Full.wav',
-        '/Coffee Shop Loop Kit/Hot Pot Coffee - C# Major 85 BPM/Hot Pot Coffee - C# Major 85 BPM Full.wav'
+        '/Coffee Shop Loop Kit/Foggy Dreams - C Major 85 BPM/Foggy Dreams - C Major 85 BPM Pad.mp3'
       ]
     }
 
