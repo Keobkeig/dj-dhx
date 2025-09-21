@@ -8,6 +8,21 @@ import { audioAnalyzer } from './utils/audioAnalysis'
 import type { AudioAnalysisResult } from './utils/audioAnalysis'
 import { AISection } from './components/AISection'
 import { musicSearchService } from './services/spotifyService'
+import {
+  DndContext,
+  useDroppable,
+  DragOverlay
+} from '@dnd-kit/core'
+import { useDraggable } from '@dnd-kit/core'
+import type { DragEndEvent, Modifier } from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import MiniVinylRecord from './components/MiniVinylRecord'
 
 type PadType = 'drums' | 'bass' | 'melodic' | 'fx' | 'vocal' | 'perc' | 'stop' | 'mute'
 
@@ -57,11 +72,15 @@ function App() {
   const [audioElements, setAudioElements] = useState<Map<string, HTMLAudioElement>>(new Map())
   const [showHelp, setShowHelp] = useState<boolean>(false)
   const [showQueue, setShowQueue] = useState<boolean>(true)
+  const [queue, setQueue] = useState<Track[]>([])
+  const [recentlyFinished, setRecentlyFinished] = useState<Track[]>([])
   const [leftDeckAudio, setLeftDeckAudio] = useState<HTMLAudioElement | null>(null)
   const [rightDeckAudio, setRightDeckAudio] = useState<HTMLAudioElement | null>(null)
   const [showBpmGuide, setShowBpmGuide] = useState<boolean>(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentDeck, setCurrentDeck] = useState<'left' | 'right'>('left')
+  const [dragging, setDragging] = useState<{ track?: Track } | null>(null)
+  
   const [, ] = useState([
     { title: "Uptown Funk", artist: "Bruno Mars", status: "playing" },
     { title: "Good 4 U", artist: "Olivia Rodrigo", status: "queued" },
@@ -77,6 +96,20 @@ function App() {
   // Calculate individual track volumes based on crossfader position
   const leftTrackVolume = masterVolume * (1 - Math.max(0, (crossfaderPosition - 0.5) * 2))
   const rightTrackVolume = masterVolume * (1 - Math.max(0, (0.5 - crossfaderPosition) * 2))
+  const dragAnchorRef = useRef<{x:number; y:number} | null>(null)
+  const centerOverlayAtPointer: Modifier = ({ transform, overlayNodeRect }) => {
+    const anchor = dragAnchorRef.current;
+    if (!anchor || !overlayNodeRect) return transform;
+
+    // Move the overlay so its CENTER sits at the pointer
+    return {
+      ...transform,
+      x: transform.x + anchor.x - overlayNodeRect.width / 2,
+      y: transform.y + anchor.y - overlayNodeRect.height / 2,
+    };
+  };
+
+
 
   // Update track volumes when crossfader changes
   useEffect(() => {
@@ -116,6 +149,7 @@ function App() {
 
       // Add to loaded tracks and analyze
       setLoadedTracks(prev => [...prev, newTrack])
+      setQueue(prev => [...prev, newTrack])
 
       // Analyze the track if it's a valid audio file
       if (result.url && result.source === 'spotify') {
@@ -293,6 +327,11 @@ function App() {
 
           if (loadedCount === files.length) {
             setLoadedTracks(prev => [...prev, ...newTracks])
+            setQueue(prev => {
+              const existing = new Set(prev.map(t => t.id))
+              const toAdd = newTracks.filter(t => !existing.has(t.id))
+              return [...prev, ...toAdd]
+            })
             if (newTracks.length > 0) {
               const firstTrack = newTracks[0]
               setTracks(prev => prev.map(track =>
@@ -300,6 +339,9 @@ function App() {
                   ? { ...firstTrack, position, playing: false }
                   : track
               ))
+
+              setQueue(prev => prev.filter(t => t.id !== firstTrack.id))
+
               setCurrentTrackIndex(loadedTracks.length)
             }
           }
@@ -331,7 +373,7 @@ function App() {
         // Currently paused - resume it
         deckAudio.play().catch(console.error)
         setTracks(prev => prev.map(track =>
-          track.position === targetPosition ? { ...track, playing: true } : track
+          track.position === targetPosition ? { ...track, playing: false } : track
         ))
       }
       return
@@ -339,7 +381,6 @@ function App() {
 
     // If no audio for this deck, create one for the target track
     if (!targetTrack?.audioFile) {
-      alert(`No track loaded on ${targetPosition} deck. Please load an MP3 file first.`)
       return
     }
 
@@ -380,19 +421,89 @@ function App() {
       }
     })
 
-    newAudio.addEventListener('ended', () => {
-      // Track ended - stop playing state for this deck only
-      setTracks(prev => prev.map(track =>
-        track.position === targetPosition ? { ...track, playing: false } : track
-      ))
+  newAudio.addEventListener('ended', () => {
+    // 1. Move to Recently Finished
+    setRecentlyFinished(prev => {
+      const withoutDup = prev.filter(t => t.id !== targetTrack!.id);
+      return [targetTrack!, ...withoutDup].slice(0, 5);
+    });
 
-      const endProgressData = { currentTime: 0, duration: newAudio.duration || 0 }
-      if (targetPosition === 'left') {
-        setLeftSongProgress(endProgressData)
-      } else {
-        setRightSongProgress(endProgressData)
+    // 2. Get the next item from queue
+    setQueue(prevQueue => {
+      if (prevQueue.length === 0) {
+        // Nothing to play next, clear deck
+        setTracks(prev =>
+          prev.map(track =>
+            track.position === targetPosition
+              ? {
+                  ...track,
+                  playing: false,
+                  title: 'Load MP3 File',
+                  artist: 'Click to browse',
+                  audioFile: undefined,
+                }
+              : track
+          )
+        );
+        if (targetPosition === 'left') {
+          setLeftDeckAudio(null);
+          setLeftSongProgress({ currentTime: 0, duration: 0 });
+        } else {
+          setRightDeckAudio(null);
+          setRightSongProgress({ currentTime: 0, duration: 0 });
+        }
+        return prevQueue;
       }
-    })
+
+      const [nextUp, ...rest] = prevQueue;
+
+      // Set new track onto deck
+      setTracks(prev =>
+        prev.map(t =>
+          t.position === targetPosition
+            ? { ...nextUp, position: targetPosition, playing: false }
+            : t
+        )
+      );
+
+      // Start playing it
+      const nextAudio = new Audio(nextUp.audioFile!);
+      nextAudio.addEventListener('timeupdate', () => {
+        if (targetPosition === 'left') {
+          setLeftSongProgress({
+            currentTime: nextAudio.currentTime,
+            duration: nextAudio.duration || 0,
+          });
+        } else {
+          setRightSongProgress({
+            currentTime: nextAudio.currentTime,
+            duration: nextAudio.duration || 0,
+          });
+        }
+      });
+
+      nextAudio.addEventListener('loadedmetadata', () => {
+        const dur = nextAudio.duration || 0;
+        if (targetPosition === 'left') {
+          setLeftSongProgress({ currentTime: 0, duration: dur });
+        } else {
+          setRightSongProgress({ currentTime: 0, duration: dur });
+        }
+      });
+
+      nextAudio.addEventListener('ended', () => {
+        newAudio.dispatchEvent(new Event('ended'));
+      });
+
+      if (targetPosition === 'left') {
+        setLeftDeckAudio(nextAudio);
+      } else {
+        setRightDeckAudio(nextAudio);
+      }
+
+      return rest;
+    });
+  });
 
     // Set this as the deck audio and start playing
     setDeckAudio(newAudio)
@@ -503,7 +614,101 @@ function App() {
     })
   }, [audioElements])
 
-  // Initialize 8x8 grid with hardcoded drum folder paths
+  useEffect(() => {
+    // Is either deck empty?
+    const leftEmpty  = !tracks.find(t => t.position === 'left')?.audioFile;
+    const rightEmpty = !tracks.find(t => t.position === 'right')?.audioFile;
+
+    if ((!leftEmpty && !rightEmpty) || queue.length === 0) return;
+
+    // Work on local copies so we can commit one setQueue + one setTracks
+    const newQueue = [...queue];
+    const replacements: Partial<Record<'left' | 'right', Track>> = {};
+
+    if (leftEmpty && newQueue.length > 0) {
+      replacements.left = newQueue.shift()!;
+    }
+    if (rightEmpty && newQueue.length > 0) {
+      replacements.right = newQueue.shift()!;
+    }
+
+    // If we filled anything, commit updates (stay paused: playing=false; no audio elements created)
+    if (replacements.left || replacements.right) {
+      setTracks(prev =>
+        prev.map(tr => {
+          if (replacements.left && tr.position === 'left') {
+            return { ...replacements.left, position: 'left', playing: false };
+          }
+          if (replacements.right && tr.position === 'right') {
+            return { ...replacements.right, position: 'right', playing: false };
+          }
+          return tr;
+        })
+      );
+      setQueue(newQueue);
+
+      // Ensure deck audios are cleared when replacing an empty slot (defensive)
+      if (leftEmpty && leftDeckAudio) {
+        leftDeckAudio.pause();
+        setLeftDeckAudio(null);
+        setLeftSongProgress({ currentTime: 0, duration: 0 });
+      }
+      if (rightEmpty && rightDeckAudio) {
+        rightDeckAudio.pause();
+        setRightDeckAudio(null);
+        setRightSongProgress({ currentTime: 0, duration: 0 });
+      }
+    }
+  }, [queue, tracks, leftDeckAudio, rightDeckAudio]);
+
+  useEffect(() => {
+    // Is either deck empty?
+    const leftEmpty  = !tracks.find(t => t.position === 'left')?.audioFile;
+    const rightEmpty = !tracks.find(t => t.position === 'right')?.audioFile;
+
+    if ((!leftEmpty && !rightEmpty) || queue.length === 0) return;
+
+    // Work on local copies so we can commit one setQueue + one setTracks
+    const newQueue = [...queue];
+    const replacements: Partial<Record<'left' | 'right', Track>> = {};
+
+    if (leftEmpty && newQueue.length > 0) {
+      replacements.left = newQueue.shift()!;
+    }
+    if (rightEmpty && newQueue.length > 0) {
+      replacements.right = newQueue.shift()!;
+    }
+
+    // If we filled anything, commit updates (stay paused: playing=false; no audio elements created)
+    if (replacements.left || replacements.right) {
+      setTracks(prev =>
+        prev.map(tr => {
+          if (replacements.left && tr.position === 'left') {
+            return { ...replacements.left, position: 'left', playing: false };
+          }
+          if (replacements.right && tr.position === 'right') {
+            return { ...replacements.right, position: 'right', playing: false };
+          }
+          return tr;
+        })
+      );
+      setQueue(newQueue);
+
+      // Ensure deck audios are cleared when replacing an empty slot (defensive)
+      if (leftEmpty && leftDeckAudio) {
+        leftDeckAudio.pause();
+        setLeftDeckAudio(null);
+        setLeftSongProgress({ currentTime: 0, duration: 0 });
+      }
+      if (rightEmpty && rightDeckAudio) {
+        rightDeckAudio.pause();
+        setRightDeckAudio(null);
+        setRightSongProgress({ currentTime: 0, duration: 0 });
+      }
+    }
+  }, [queue, tracks, leftDeckAudio, rightDeckAudio]);
+
+  // Initialize 8x8 grid with sounds + stop/mute, new keyRows mapping
   useEffect(() => {
     const initialPads: Pad[] = []
 
@@ -941,7 +1146,19 @@ function App() {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
     }
-  }, [pads, handlePadClick])
+}, [
+  pads,
+  handlePadClick,
+  togglePlayPause,
+  nextTrack,      
+  pauseAllAudio,  
+  resumeAllAudio, 
+  setCrossfaderPosition,
+  setShowHelp,          
+  setShowQueue,         
+  setShowBpmGuide,      
+  setShowAI             
+])
 
   const getPadColor = (pad: Pad): string => {
     // Vibrant colors for each sound type
@@ -974,429 +1191,752 @@ function App() {
     return colorClass
   }
 
+  function DeckDropZone({
+    id,
+    children
+  }: { id: 'deck-left' | 'deck-right'; children: React.ReactNode }) {
+    const { setNodeRef, isOver } = useDroppable({ id })
+    return (
+      <div ref={setNodeRef} className={isOver ? 'ring-2 ring-blue-500 rounded-lg' : ''}>
+        {children}
+      </div>
+    )
+  }
+
+  function SortableQueueItem({
+    track,
+    index
+  }: { track: Track; index: number }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = 
+      useSortable({ id: track.id, data: { from: 'queue', index, track } })
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.6 : 1
+    }
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className="p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 cursor-grab select-none border border-transparent"
+        title={`${track.title} — ${track.artist}`}
+      >
+        <div className="text-white text-sm font-medium truncate">{track.title}</div>
+        <div className="text-gray-400 text-xs truncate">{track.artist}</div>
+        <div className="text-gray-500 text-xs">{track.bpm} BPM • {track.key}</div>
+      </div>
+    )
+  }
+
+  function findQueueIndexById(id: string) {
+    return queue.findIndex(t => t.id === id)
+  }
+
+  function replaceDeck(
+    deck: 'left' | 'right',
+    newTrack: Track
+  ) {
+    // stop current deck audio if necessary
+    const deckAudio = deck === 'left' ? leftDeckAudio : rightDeckAudio
+    const setDeckAudio = deck === 'left' ? setLeftDeckAudio : setRightDeckAudio
+
+    if (deckAudio) {
+      deckAudio.pause()
+      deckAudio.currentTime = 0
+      setDeckAudio(null)
+    }
+
+    // replace the deck's track (not auto-play)
+    setTracks(prev => prev.map(t =>
+      t.position === deck ? { ...newTrack, position: deck, playing: false } : t
+    ))
+  }
+
+  function stopDeckAndReturnToQueue(deck: 'left' | 'right', insertIndex?: number) {
+    const deckTrack = tracks.find(t => t.position === deck)
+    if (!deckTrack) return
+
+    const deckAudio = deck === 'left' ? leftDeckAudio : rightDeckAudio
+    const setDeckAudio = deck === 'left' ? setLeftDeckAudio : setRightDeckAudio
+
+    if (deckAudio) {
+      deckAudio.pause()
+      deckAudio.currentTime = 0
+      setDeckAudio(null)
+    }
+
+    // ✅ Clear the deck so this track no longer counts as “on a deck”
+    //    (this makes it show up in the queue UI)
+    setTracks(prev => prev.map(t =>
+      t.position === deck ? makeEmptyDeckTrack(deck) : t
+    ))
+
+    // Insert into queue at desired position (dedup)
+    setQueue(prev => {
+      const existing = prev.filter(t => t.id !== deckTrack.id)
+      if (insertIndex == null || insertIndex < 0 || insertIndex > existing.length) {
+        return [...existing, deckTrack]
+      }
+      return [
+        ...existing.slice(0, insertIndex),
+        deckTrack,
+        ...existing.slice(insertIndex),
+      ]
+    })
+  }
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    dragAnchorRef.current = null
+    setDragging(null)
+    const { active, over } = event
+    if (!over) return
+
+    const activeId = String(active.id)
+    const overId = String(over.id)
+
+    const from = active.data?.current?.from as
+      | 'queue'
+      | 'deck-left'
+      | 'deck-right'
+      | 'finished'          // <-- include finished as a possible source
+      | undefined
+
+    const dataAny = active.data?.current as any
+    const trackId =
+      dataAny?.trackId ??
+      dataAny?.track?.id ??
+      null
+    // DraggableDeckItem is already disabled when no song, so no need to early-return here.
+    // If you still want a guard, ensure it respects either form:
+    if ((from === 'deck-left' || from === 'deck-right') && !trackId) {
+      // unexpected; bail safely
+      return
+    }
+
+    const findQueueIndexById = (id: string) => queue.findIndex(t => t.id === id)
+
+    // 1) Reorder within queue
+    if (from === 'queue' && queue.some(t => t.id === activeId) && queue.some(t => t.id === overId)) {
+      const oldIndex = findQueueIndexById(activeId)
+      const newIndex = findQueueIndexById(overId)
+      if (oldIndex >= 0 && newIndex >= 0 && oldIndex !== newIndex) {
+        setQueue(prev => arrayMove(prev, oldIndex, newIndex))
+      }
+      return
+    }
+
+    // 2) Queue -> Deck
+    if (from === 'queue' && (overId === 'deck-left' || overId === 'deck-right')) {
+      const idx = findQueueIndexById(activeId)
+      if (idx >= 0) {
+        const track = queue[idx]
+        replaceDeck(overId === 'deck-left' ? 'left' : 'right', track)
+        setQueue(prev => prev.filter(t => t.id !== track.id))
+      }
+      return
+    }
+
+    // 3) Deck -> Queue (drop on container to append)
+    if ((from === 'deck-left' || from === 'deck-right') && overId === 'queue-dropzone') {
+      stopDeckAndReturnToQueue(from === 'deck-left' ? 'left' : 'right', queue.length)
+      return
+    }
+
+    // 3b) Deck -> Queue (drop on item to insert)
+    if ((from === 'deck-left' || from === 'deck-right') && queue.some(t => t.id === overId)) {
+      const insertIndex = findQueueIndexById(overId)
+      stopDeckAndReturnToQueue(from === 'deck-left' ? 'left' : 'right', insertIndex)
+      return
+    }
+
+    // === NEW: Finished -> Queue ===
+    if (from === 'finished') {
+      const draggedId = trackId ?? activeId
+      const dragged = recentlyFinished.find(t => t.id === draggedId)
+      if (!dragged) return
+
+      // Drop on container: append to end (dedup)
+      if (overId === 'queue-dropzone') {
+        setQueue(prev => {
+          if (prev.some(t => t.id === dragged.id)) return prev
+          return [...prev, dragged]
+        })
+        return
+      }
+
+      // Drop on a specific queue item: insert before it (dedup)
+      if (queue.some(t => t.id === overId)) {
+        const insertIndex = findQueueIndexById(overId)
+        if (insertIndex < 0) return
+        setQueue(prev => {
+          const withoutDup = prev.filter(t => t.id !== dragged.id)
+          return [
+            ...withoutDup.slice(0, insertIndex),
+            dragged,
+            ...withoutDup.slice(insertIndex),
+          ]
+        })
+        return
+      }
+    }
+  }, [queue, recentlyFinished, replaceDeck, stopDeckAndReturnToQueue])
+
+
+  function DraggableFinishedItem({ track }: { track: Track }) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+      id: track.id,
+      data: { from: 'finished', track }, // 
+    })
+
+    const style: React.CSSProperties = isDragging
+      ? { opacity: 0, visibility: 'hidden' }
+      : {};
+
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...attributes}
+        {...listeners}
+        className="p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 select-none border border-transparent"
+        title={`${track.title} — ${track.artist}`}
+      >
+        <div className="text-white text-sm font-medium truncate">{track.title}</div>
+        <div className="text-gray-400 text-xs truncate">{track.artist}</div>
+      </div>
+    )
+  }
+
+  function DraggableDeckItem({
+    deck,
+    track,
+    children,
+  }: {
+    deck: 'left' | 'right'
+    track?: Track
+    children: React.ReactNode
+  }) {
+    const draggableId = track?.id ? `deck-${deck}-${track.id}` : `deck-${deck}-empty`
+
+    const hasSong = !!track?.audioFile   // <- only allow drag when a real file is loaded
+    const cornerClass = deck === 'left' ? 'left-2' : 'right-2'
+
+    const { attributes, listeners, setNodeRef, transform, isDragging } =
+      useDraggable({
+        id: draggableId,
+        data: { from: deck === 'left' ? 'deck-left' : 'deck-right', track },
+        disabled: !hasSong,  // <- disables dragging if no audio file
+      })
+
+    const style: React.CSSProperties = isDragging
+      ? { opacity: 0, visibility: 'hidden' }
+      : {};
+
+    return (
+      <div ref={setNodeRef} style={style} className="relative">
+        {/* Clickable vinyl stays clickable */}
+        {children}
+
+        {/* Small drag handle (only if there's a song) */}
+        {hasSong && (
+          <button
+            type="button"
+            aria-label={`Drag ${deck} deck`}
+            title={`Drag ${deck} deck`}
+            {...listeners}
+            {...attributes}
+            onClick={(e) => e.stopPropagation()} // don't trigger the vinyl click
+            className={`absolute top-2 ${cornerClass} z-10 rounded px-1.5 py-0.5 text-xs
+                        bg-gray-800/70 hover:bg-gray-700/70 cursor-grab select-none`}
+          >
+            ⋮⋮
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  function QueueDropZone({ children }: { children: React.ReactNode }) {
+    const { setNodeRef, isOver } = useDroppable({ id: 'queue-dropzone' })
+    return (
+      <div ref={setNodeRef} className={isOver ? 'ring-2 ring-blue-500 rounded-md' : ''}>
+        {children}
+      </div>
+    )
+  }
+
+// === Derived queue/deck views (show deck tracks as "Currently Playing" even if paused) ===
+const leftDeckTrack = tracks.find(t => t.position === 'left' && !!t.audioFile)
+const rightDeckTrack = tracks.find(t => t.position === 'right' && !!t.audioFile)
+
+// Build a Set of deck track IDs so we can hide them from "In Queue" and "Recently Finished"
+const deckIds = new Set<string>(
+  [leftDeckTrack?.id, rightDeckTrack?.id].filter((x): x is string => Boolean(x))
+)
+
+const makeEmptyDeckTrack = (position: 'left' | 'right'): Track => ({
+  id: position === 'left' ? '1' : '2',
+  title: 'Load MP3 File',
+  artist: 'Click to browse',
+  playing: false,
+  position,
+  bpm: 120,
+  key: 'C',
+  volume: 1.0,
+  audioFile: undefined,
+  duration: 0,
+  currentTime: 0,
+  analyzing: false,
+})
+
+const visibleQueue = queue.filter(t => !deckIds.has(t.id))
+const visibleFinished = recentlyFinished.filter(t => !deckIds.has(t.id))
+
   return (
-    <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
-      {/* Dual Progress Bars */}
-      <SongProgress
-        leftProgress={leftSongProgress}
-        rightProgress={rightSongProgress}
-        leftPlaying={tracks.find(t => t.position === 'left')?.playing || false}
-        rightPlaying={tracks.find(t => t.position === 'right')?.playing || false}
-      />
-      {/* Header */}
-      <div className="flex items-center justify-center w-full mb-4">
-        <div className="flex items-center">
-          <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mr-4">
-            <div className="w-8 h-8 bg-black transform rotate-45"></div>
-          </div>
-          <h1 className="text-4xl font-bold tracking-wider futuristic-font">DHX</h1>
-          {/* <span className="ml-4 px-3 py-1 bg-gray-700 rounded text-sm">INTRO</span> */}
-        </div>
-      </div>
+  <DndContext
+    onDragStart={(evt) => {
+      const { active } = evt
+      const data = active.data?.current as any
+      let t: Track | undefined = data?.track
 
-      {/* Crossfader - Below logo */}
-      <div className="flex flex-col items-center mb-6">
-        <div className="text-white text-xs mb-2 futuristic-font">CROSSFADER</div>
-        <div className="relative w-64 h-4 bg-gray-800 rounded-full">
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={crossfaderPosition}
-            onChange={(e) => setCrossfaderPosition(parseFloat(e.target.value))}
-            className="absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer"
-          />
-          <div
-            className="absolute w-6 h-6 bg-white rounded-full border-2 border-gray-600 pointer-events-none transform -translate-y-1"
-            style={{
-              left: `${crossfaderPosition * (256 - 24)}px`
-            }}
-          />
-        </div>
-        <div className="flex justify-between w-full mt-1 text-[10px] text-gray-400">
-          <div className="flex flex-col items-center">
-            <span>LEFT</span>
-            {shiftPressed && (
-              <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">[</kbd>
-            )}
-          </div>
-          <span className="text-gray-300 text-xs">
-            {crossfaderPosition < 0.4 ? 'LEFT' : crossfaderPosition > 0.6 ? 'RIGHT' : 'CENTER'}
-          </span>
-          <div className="flex flex-col items-center">
-            <span>RIGHT</span>
-            {shiftPressed && (
-              <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">]</kbd>
-            )}
-          </div>
-        </div>
-      </div>
+      // Fallback lookup (keeps your existing behavior)
+      if (!t) {
+        const activeId = String(active.id)
+        t =
+          (leftDeckTrack && activeId.includes(leftDeckTrack.id) && leftDeckTrack) ||
+          (rightDeckTrack && activeId.includes(rightDeckTrack.id) && rightDeckTrack) ||
+          queue.find(q => q.id === activeId) ||
+          recentlyFinished.find(r => r.id === activeId)
+      }
+      if (t) setDragging({ track: t })
 
-      {/* AI Section */}
-      <AISection
-        onSongRequest={handleSongRequest}
-        onCancelRequest={handleCancelRequest}
-        isSearching={aiSearching}
-        isVisible={showAI}
-      />
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".mp3,audio/mp3"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFileUpload(e, currentDeck)}
-      />
-
-      <div className="flex items-center justify-center w-full max-w-[1600px] gap-4 xl:gap-8 flex-wrap lg:flex-nowrap">
-        {/* Left Vinyl */}
-        <div className="flex-shrink-0">
-          <div onClick={() => handleVinylClick('left')} className="cursor-pointer">
-            <VinylRecord track={tracks[0]} />
+      // NEW: record pointer offset inside the node at activation
+      const init = active.rect.current?.initial;
+      const e = evt.activatorEvent;
+      if (init && (e instanceof MouseEvent || e instanceof PointerEvent)) {
+        dragAnchorRef.current = {
+          x: e.clientX - init.left,
+          y: e.clientY - init.top,
+        };
+      } else {
+        dragAnchorRef.current = null;
+      }
+    }}
+    onDragEnd={handleDragEnd}
+    onDragCancel={() => { setDragging(null); dragAnchorRef.current = null }}
+  >
+      <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
+        {/* Dual Progress Bars */}
+        <SongProgress
+          leftProgress={leftSongProgress}
+          rightProgress={rightSongProgress}
+          leftPlaying={tracks.find(t => t.position === 'left')?.playing || false}
+          rightPlaying={tracks.find(t => t.position === 'right')?.playing || false}
+        />
+        {/* Header */}
+        <div className="flex items-center justify-center w-full mb-4">
+          <div className="flex items-center">
+            <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center mr-4">
+              <div className="w-8 h-8 bg-black transform rotate-45"></div>
+            </div>
+            <h1 className="text-4xl font-bold tracking-wider futuristic-font">DHX</h1>
+            {/* <span className="ml-4 px-3 py-1 bg-gray-700 rounded text-sm">INTRO</span> */}
           </div>
         </div>
 
-        {/* Launchpad Grid - Fixed 8x8 */}
-        <div className="flex-shrink-0">
-          <div className="grid grid-cols-8 gap-1 p-6 bg-gray-900 rounded-lg shadow-2xl border-4 border-gray-800 w-fit mx-auto"
-               style={{
-                 display: 'grid',
-                 gridTemplateColumns: 'repeat(8, 80px)',
-                 gridTemplateRows: 'repeat(8, 80px)'
-               }}>
-            {pads.map((pad) => {
-              const pulseColor = pad.type === 'drums' ? '#f97316' :
-                                pad.type === 'bass' ? '#10b981' :
-                                pad.type === 'melodic' ? '#a855f7' :
-                                pad.type === 'fx' ? '#06b6d4' :
-                                pad.type === 'vocal' ? '#ec4899' :
-                                pad.type === 'perc' ? '#eab308' : '#6b7280'
-
-              const commonProps = {
-                onClick: () => handlePadClick(pad),
-                className: `
-                  w-20 h-20 rounded-lg transition-all duration-150 transform
-                  ${getPadColor(pad)}
-                  border-2 border-gray-800 hover:border-gray-600
-                  flex flex-col items-center justify-center
-                  text-sm font-bold text-white/90
-                  relative overflow-hidden
-                  min-w-[80px] min-h-[80px]
-                `,
-                title: `${pad.label} - Channel ${pad.channel + 1}${pad.keyBinding ? ` - Key: ${pad.keyBinding}` : ''}`
-              }
-
-              const padContent = (
-                <>
-                  {/* Circular icon for loops, arrow for one-shots - Fixed positioning */}
-                  <div className="absolute top-1 left-1 pointer-events-none">
-                    {pad.isOneShot ? (
-                      <div className="text-white/40 text-xs">→</div>
-                    ) : (
-                      <div className="text-white/40 text-xs">↻</div>
-                    )}
-                  </div>
-
-                  {/* Key binding (show only if shiftPressed) */}
-                  {pad.keyBinding && shiftPressed && (
-                    <div className="text-white/60 text-[10px] mb-1 pointer-events-none">{pad.keyBinding}</div>
-                  )}
-
-                  {/* Label */}
-                  <div className="text-[9px] leading-tight text-center px-1 pointer-events-none">
-                    {pad.label}
-                  </div>
-                </>
-              )
-
-              return pad.active ? (
-                <PulsatingButton
-                  key={pad.id}
-                  {...commonProps}
-                  pulseColor={pulseColor}
-                  duration="2s"
-                >
-                  {padContent}
-                </PulsatingButton>
-              ) : (
-                <button
-                  key={pad.id}
-                  {...commonProps}
-                >
-                  {padContent}
-                </button>
-              )
-            })}
+        {/* Crossfader - Below logo */}
+        <div className="flex flex-col items-center mb-6">
+          <div className="text-white text-xs mb-2 futuristic-font">CROSSFADER</div>
+          <div className="relative w-64 h-4 bg-gray-800 rounded-full">
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={crossfaderPosition}
+              onChange={(e) => setCrossfaderPosition(parseFloat(e.target.value))}
+              className="absolute inset-0 w-full h-full appearance-none bg-transparent cursor-pointer"
+            />
+            <div
+              className="absolute w-6 h-6 bg-white rounded-full border-2 border-gray-600 pointer-events-none transform -translate-y-1"
+              style={{
+                left: `${crossfaderPosition * (256 - 24)}px`
+              }}
+            />
           </div>
-
-          {/* Indicators */}
-          <div className="mt-4 text-center space-y-2">
-            {globalPaused && (
-              <div className="inline-flex items-center px-3 py-1 bg-red-600 rounded-full text-white font-bold text-sm">
-                ⏸ PAUSED - Press SPACEBAR to resume
-              </div>
-            )}
-            <div className="text-gray-400 text-sm space-x-2 futuristic-font flex flex-wrap items-center justify-center gap-2">
-              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">?</kbd> for help</span>
-              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">~</kbd> for BPM guide</span>
-              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">+</kbd> for AI</span>
+          <div className="flex justify-between w-full mt-1 text-[10px] text-gray-400">
+            <div className="flex flex-col items-center">
+              <span>LEFT</span>
+              {shiftPressed && (
+                <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">[</kbd>
+              )}
+            </div>
+            <span className="text-gray-300 text-xs">
+              {crossfaderPosition < 0.4 ? 'LEFT' : crossfaderPosition > 0.6 ? 'RIGHT' : 'CENTER'}
+            </span>
+            <div className="flex flex-col items-center">
+              <span>RIGHT</span>
+              {shiftPressed && (
+                <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[8px] text-white mt-1">]</kbd>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Right Vinyl */}
-        <div className="flex-shrink-0">
-          <div onClick={() => handleVinylClick('right')} className="cursor-pointer">
-            <VinylRecord track={tracks[1]} />
+        {/* AI Section */}
+        <AISection
+          onSongRequest={handleSongRequest}
+          onCancelRequest={handleCancelRequest}
+          isSearching={aiSearching}
+          isVisible={showAI}
+        />
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".mp3,audio/mp3"
+          multiple
+          className="hidden"
+          onChange={(e) => handleFileUpload(e, currentDeck)}
+        />
+
+        <div className="flex items-center justify-center w-full max-w-[1600px] gap-4 xl:gap-8 flex-wrap lg:flex-nowrap">
+          {/* Left Vinyl */}
+          <div className="flex-shrink-0 w-48">
+            <DeckDropZone id="deck-left">
+              <DraggableDeckItem deck="left" track={tracks.find(t => t.position === 'left')}>
+                <div onClick={() => handleVinylClick('left')} className="cursor-pointer">
+                  <VinylRecord track={tracks[0]} />
+                </div>
+              </DraggableDeckItem>
+            </DeckDropZone>
+          </div>
+
+          {/* Launchpad Grid - Fixed 8x8 */}
+          <div className="flex-shrink-0">
+            <div className="grid grid-cols-8 gap-1 p-6 bg-gray-900 rounded-lg shadow-2xl border-4 border-gray-800 w-fit mx-auto"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(8, 80px)',
+                  gridTemplateRows: 'repeat(8, 80px)'
+                }}>
+              {pads.map((pad) => {
+                const pulseColor = pad.type === 'drums' ? '#f97316' :
+                                  pad.type === 'bass' ? '#10b981' :
+                                  pad.type === 'melodic' ? '#a855f7' :
+                                  pad.type === 'fx' ? '#06b6d4' :
+                                  pad.type === 'vocal' ? '#ec4899' :
+                                  pad.type === 'perc' ? '#eab308' :
+                                  pad.type === 'stop' ? '#ef4444' : '#6b7280'
+
+                const commonProps = {
+                  onClick: () => handlePadClick(pad),
+                  className: `
+                    w-20 h-20 rounded-lg transition-all duration-150 transform
+                    ${getPadColor(pad)}
+                    border-2 border-gray-800 hover:border-gray-600
+                    flex flex-col items-center justify-center
+                    text-sm font-bold text-white/90
+                    relative overflow-hidden
+                    min-w-[80px] min-h-[80px]
+                  `,
+                  title: `${pad.label} - Channel ${pad.channel + 1}${pad.keyBinding ? ` - Key: ${pad.keyBinding}` : ''}`
+                }
+
+                const padContent = (
+                  <>
+                    {/* Circular icon for loops, arrow for one-shots - Fixed positioning */}
+                    <div className="absolute top-1 left-1 pointer-events-none">
+                      {pad.isOneShot ? (
+                        <div className="text-white/40 text-xs">→</div>
+                      ) : (
+                        <div className="text-white/40 text-xs">↻</div>
+                      )}
+                    </div>
+
+                    {/* Key binding (show only if shiftPressed) */}
+                    {pad.keyBinding && shiftPressed && (
+                      <div className="text-white/60 text-[10px] mb-1 pointer-events-none">{pad.keyBinding}</div>
+                    )}
+
+                    {/* Label */}
+                    <div className="text-[9px] leading-tight text-center px-1 pointer-events-none">
+                      {pad.label}
+                    </div>
+                  </>
+                )
+
+                return pad.active ? (
+                  <PulsatingButton
+                    key={pad.id}
+                    {...commonProps}
+                    pulseColor={pulseColor}
+                    duration="2s"
+                  >
+                    {padContent}
+                  </PulsatingButton>
+                ) : (
+                  <button
+                    key={pad.id}
+                    {...commonProps}
+                  >
+                    {padContent}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Indicators */}
+            <div className="mt-4 text-center space-y-2">
+              {globalPaused && (
+                <div className="inline-flex items-center px-3 py-1 bg-red-600 rounded-full text-white font-bold text-sm">
+                  ⏸ PAUSED - Press SPACEBAR to resume
+                </div>
+              )}
+              <div className="text-gray-400 text-sm space-x-2 futuristic-font">
+                <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">?</kbd> for help</span>
+                <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">~</kbd> for BPM guide</span>
+                <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">+</kbd> for AI</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Vinyl */}
+          <div className="flex-shrink-0 w-48">
+            <DeckDropZone id="deck-right">
+              <DraggableDeckItem deck="right" track={tracks.find(t => t.position === 'right')}>
+                <div onClick={() => handleVinylClick('right')} className="cursor-pointer">
+                  <VinylRecord track={tracks[1]} />
+                </div>
+              </DraggableDeckItem>
+            </DeckDropZone>
           </div>
         </div>
-      </div>
 
-      {/* Help Modal */}
-      {showHelp && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-900/80 backdrop-blur-md rounded-lg p-6 max-w-4xl mx-4 border border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">Launchpad Controls</h2>
+        {/* Help Modal */}
+        {showHelp && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="bg-gray-900/80 backdrop-blur-md rounded-lg p-8 max-w-2xl mx-4 border border-gray-700">
+              <h2 className="text-2xl font-bold mb-6 text-white">Launchpad Controls</h2>
+              <div className="space-y-4 text-gray-300">
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Basic Controls:</h3>
+                  <ul className="space-y-1 ml-4">
+                    <li>• Click pads to trigger sounds</li>
+                    <li>• Use keyboard keys to trigger pads (see mapping below)</li>
+                    <li>• Spacebar: Global pause/unpause</li>
+                    <li>• Only one loop sound per column can be active</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Keyboard Mapping:</h3>
+                  <ul className="space-y-1 ml-4 text-sm">
+                    <li>• <strong>Row 0-3:</strong> 1-8, QWERTY, ASDF, ZXCV</li>
+                    <li>• <strong>Row 5:</strong> !@#$%^&* (Shift + 1-8)</li>
+                    <li>• <strong>STOP:</strong> ASDFGHJK (uppercase)</li>
+                    <li>• <strong>MUTE:</strong> ZXCVBNM&lt; (uppercase)</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Sound Types:</h3>
+                  <ul className="space-y-1 ml-4">
+                    <li>• <span className="text-orange-400">Orange</span>: Drums (loops)</li>
+                    <li>• <span className="text-green-400">Green</span>: Bass (loops)</li>
+                    <li>• <span className="text-purple-400">Purple</span>: Melodic (loops)</li>
+                    <li>• <span className="text-cyan-400">Cyan</span>: FX (one-shots)</li>
+                    <li>• <span className="text-pink-400">Pink</span>: Vocals (one-shots)</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Deck Controls:</h3>
+                  <ul className="space-y-1 ml-4">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">9</kbd> Play/Pause left deck</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">O</kbd> Play/Pause right deck</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">L</kbd> Next track</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">.</kbd> Toggle queue</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">~</kbd> Toggle BPM guide</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">Crossfader Controls:</h3>
+                  <ul className="space-y-1 ml-4">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">[</kbd> Move crossfader left</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">]</kbd> Move crossfader right</li>
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-white mb-2">AI Assistant:</h3>
+                  <ul className="space-y-1 ml-4">
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">+</kbd> Toggle AI assistant menu</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">-</kbd> Toggle voice listening (when AI open)</li>
+                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Backspace</kbd> Cancel AI search</li>
+                    <li>• Say "Can you play [song name]" to search and download</li>
+                  </ul>
+                </div>
+              </div>
               <button
                 onClick={() => setShowHelp(false)}
-                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                className="mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 Close
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-6 text-gray-300 text-sm">
-              {/* Left Column */}
-              <div className="space-y-3">
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Basic Controls:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• Click pads to trigger sounds</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">Space</kbd> Global pause/unpause</li>
-                    <li>• Only one loop per column active</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Sound Types:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <span className="text-orange-400">Orange</span>: Drums</li>
-                    <li>• <span className="text-green-400">Green</span>: Bass</li>
-                    <li>• <span className="text-purple-400">Purple</span>: Melodic</li>
-                    <li>• <span className="text-cyan-400">Cyan</span>: FX</li>
-                    <li>• <span className="text-pink-400">Pink</span>: Vocals</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Deck Controls:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">9</kbd> Play/Pause left deck</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">O</kbd> Play/Pause right deck</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">L</kbd> Next track</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Track Seeking:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">←→</kbd> Left track start/end</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">↓↑</kbd> Right track start/end</li>
-                  </ul>
-                </div>
-              </div>
+          </div>
+        )}
 
-              {/* Right Column */}
-              <div className="space-y-3">
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Keyboard Mapping:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <strong>Rows 0-3:</strong> 1-8, QWERTY, ASDF, ZXCV</li>
-                    <li>• <strong>Row 4:</strong> !@#$%^&* (Shift + 1-8)</li>
-                    <li>• <strong>STOP:</strong> QWERTYUO (uppercase)</li>
-                    <li>• <strong>MUTE:</strong> ASDFGHJL (uppercase)</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">Crossfader:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">[</kbd> Move left</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">]</kbd> Move right</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">AI Assistant:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">+</kbd> Toggle AI menu</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">-</kbd> Toggle voice listening</li>
-                    <li>• Say "Can you play [song]"</li>
-                  </ul>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-white mb-1">View Controls:</h3>
-                  <ul className="space-y-0.5 ml-3 text-xs">
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">?</kbd> Toggle help</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">~</kbd> Toggle BPM guide</li>
-                    <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-[10px]">.</kbd> Toggle queue</li>
-                  </ul>
-                </div>
+        {/* BPM Guide Box - Top Left */}
+        <div
+          className={`fixed top-4 left-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+            showBpmGuide
+              ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
+              : '-translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white font-semibold">BPM Guide</h3>
+            <button
+              onClick={() => setShowBpmGuide(false)}
+              className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Current playing songs info */}
+          {(() => {
+            const playingTracks = tracks.filter(t => t.playing)
+            return playingTracks.length > 0 ? (
+              <div className="mb-4 space-y-2">
+                {playingTracks.map(track => (
+                  <div key={track.id} className={`p-3 rounded border ${
+                    track.position === 'left' ? 'bg-orange-600/20 border-orange-500/30' : 'bg-purple-600/20 border-purple-500/30'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-white font-medium text-sm truncate">{track.title}</div>
+                      <div className="text-xs text-gray-300 uppercase">{track.position}</div>
+                    </div>
+                    <div className="text-gray-300 text-xs truncate">{track.artist}</div>
+                    <div className="text-green-400 text-xs mt-1 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <Volume2 size={10} className="mr-1" />
+                        {track.analyzing ? 'Analyzing...' : `${track.bpm} BPM`}
+                      </div>
+                      <div className="text-cyan-400">
+                        {track.analyzing ? '...' : `Key: ${track.key}`}
+                      </div>
+                    </div>
+                    <div className="text-green-400 text-xs">• Playing</div>
+                  </div>
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="mb-4 p-3 bg-gray-800/50 rounded">
+                <div className="text-gray-400 text-xs">No tracks playing</div>
+              </div>
+            )
+          })()}
+
+          {/* BPM Guide Chart */}
+          <div className="space-y-2">
+            <h4 className="text-white text-xs font-medium mb-2">Energy Building Guide:</h4>
+            {bpmGuide.map((guide, index) => (
+              <div key={index} className="bg-gray-800/30 p-2 rounded text-xs">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-white font-medium">{guide.phase}</span>
+                  <span className="text-green-400 font-mono">{guide.bpmRange}</span>
+                </div>
+                <div className="text-gray-400 text-[10px]">{guide.description}</div>
+              </div>
+            ))}
           </div>
         </div>
-      )}
 
-      {/* BPM Guide Box - Top Left */}
-      <div
-        className={`fixed top-4 left-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
-          showBpmGuide
-            ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
-            : '-translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
-        }`}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-semibold">BPM Guide</h3>
-          <button
-            onClick={() => setShowBpmGuide(false)}
-            className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Current playing songs info */}
-        {(() => {
-          const playingTracks = tracks.filter(t => t.playing)
-          return playingTracks.length > 0 ? (
-            <div className="mb-4 space-y-2">
-              {playingTracks.map(track => (
-                <div key={track.id} className={`p-3 rounded border ${
-                  track.position === 'left' ? 'bg-orange-600/20 border-orange-500/30' : 'bg-purple-600/20 border-purple-500/30'
-                }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-white font-medium text-sm truncate">{track.title}</div>
-                    <div className="text-xs text-gray-300 uppercase">{track.position}</div>
-                  </div>
-                  <div className="text-gray-300 text-xs truncate">{track.artist}</div>
-                  <div className="text-green-400 text-xs mt-1 flex items-center justify-between">
-                    <div className="flex items-center">
-                      <Volume2 size={10} className="mr-1" />
-                      {track.analyzing ? 'Analyzing...' : `${track.bpm} BPM`}
-                    </div>
-                    <div className="text-cyan-400">
-                      {track.analyzing ? '...' : `Key: ${track.key}`}
-                    </div>
-                  </div>
-                  <div className="text-green-400 text-xs">• Playing</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="mb-4 p-3 bg-gray-800/50 rounded">
-              <div className="text-gray-400 text-xs">No tracks playing</div>
-            </div>
-          )
-        })()}
-
-        {/* BPM Guide Chart */}
-        <div className="space-y-2">
-          <h4 className="text-white text-xs font-medium mb-2">Energy Building Guide:</h4>
-          {bpmGuide.map((guide, index) => (
-            <div key={index} className="bg-gray-800/30 p-2 rounded text-xs">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-white font-medium">{guide.phase}</span>
-                <span className="text-green-400 font-mono">{guide.bpmRange}</span>
-              </div>
-              <div className="text-gray-400 text-[10px]">{guide.description}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Song Queue Box - Bottom Right */}
-      <div
-        className={`fixed bottom-4 right-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
-          showQueue
-            ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
-            : 'translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
-        }`}
-      >
+        {/* Song Queue Box - Bottom Right */}
+        <div
+          className={`fixed bottom-4 right-4 w-80 z-40 bg-gray-900/80 backdrop-blur-md rounded-lg border border-gray-700 p-4 transition-all duration-300 ease-out ${
+            showQueue
+              ? 'translate-x-0 translate-y-0 opacity-100 scale-100'
+              : 'translate-x-8 -translate-y-8 opacity-0 scale-95 pointer-events-none'
+          }`}
+        >
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-white font-semibold">Queue</h3>
             <div className="flex gap-2">
-              <button
-                onClick={prevTrack}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
-              >
+              <button onClick={prevTrack} className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
                 <SkipBack size={12} />
               </button>
-              <button
-                onClick={() => togglePlayPause()}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
-              >
+              <button onClick={() => togglePlayPause()} className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
                 {tracks.find(t => t.playing) ? <Pause size={12} /> : <Play size={12} />}
               </button>
-              <button
-                onClick={nextTrack}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
-              >
+              <button onClick={nextTrack} className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
                 <SkipForward size={12} />
               </button>
-              <button
-                onClick={() => setShowQueue(false)}
-                className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center"
-              >
+              <button onClick={() => setShowQueue(false)} className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-xs flex items-center justify-center">
                 ✕
               </button>
             </div>
           </div>
 
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {loadedTracks.map((song, index) => (
-              <div
-                key={song.id}
-                className={`p-2 rounded cursor-pointer hover:bg-gray-700/50 ${
-                  index === currentTrackIndex ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-gray-800/50'
-                }`}
-                onClick={() => {
-                  setCurrentTrackIndex(index)
-                  const playingTrack = tracks.find(t => t.playing)
-                  const position = playingTrack?.position || 'left'
-                  setTracks(prev => prev.map(track =>
-                    track.position === position
-                      ? { ...song, position, playing: false }
-                      : track
-                  ))
-                }}
-                style={{
-                  opacity: index === currentTrackIndex ? 1 : Math.max(0.3, 1 - (Math.abs(index - currentTrackIndex) * 0.15))
-                }}
-              >
-                <div className="text-white text-sm font-medium truncate">{song.title}</div>
-                <div className="text-gray-400 text-xs truncate">{song.artist}</div>
-                <div className="flex items-center justify-between mt-1">
-                  <div className="text-gray-500 text-xs">
-                    {song.analyzing ? 'Analyzing...' : `${song.bpm} BPM • ${song.key}`}
-                  </div>
-                  <div className="text-xs">
-                    {index === currentTrackIndex && tracks.find(t => t.playing) && (
-                      <span className="text-green-400">● Playing</span>
-                    )}
-                    {index === currentTrackIndex && !tracks.find(t => t.playing) && (
-                      <span className="text-yellow-400">● Current</span>
-                    )}
+          <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+
+          {/* Currently Playing */}
+          <section>
+            <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">Currently Playing</div>
+            <div className="grid gap-2">
+              {[leftDeckTrack, rightDeckTrack].filter(Boolean).map(t => (
+                <div key={(t as Track).id} className="p-2 rounded bg-green-700/20 border border-green-500/30">
+                  <div className="text-white text-sm font-medium truncate">{(t as Track).title}</div>
+                  <div className="text-gray-300 text-xs truncate">{(t as Track).artist}</div>
+                  <div className="text-green-400 text-xs mt-1">
+                    {(t as Track).playing ? '● Playing' : '⏸ Paused'} on {(t as Track).position.toUpperCase()}
                   </div>
                 </div>
-              </div>
-            ))}
-            {loadedTracks.length === 0 && (
-              <div className="p-4 text-gray-400 text-center text-sm">
-                No tracks loaded. Click on a vinyl to load MP3 files.
-              </div>
-            )}
+              ))}
+              {[leftDeckTrack, rightDeckTrack].filter(Boolean).length === 0 && (
+                <div className="text-gray-500 text-xs">No songs on decks</div>
+              )}
+            </div>
+          </section>
+
+          {/* In Queue (sortable) */}
+          <section>
+            <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">In Queue</div>
+            <QueueDropZone>
+              <SortableContext items={visibleQueue.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="grid gap-2">
+                  {visibleQueue.length === 0 && <div className="text-gray-500 text-xs">Queue is empty</div>}
+                  {visibleQueue.map((song, index) => (
+                    <SortableQueueItem key={song.id} track={song} index={index} />
+                  ))}
+                </div>
+              </SortableContext>
+            </QueueDropZone>
+          </section>
+
+          {/* Recently Finished (draggable into queue) */}
+          <section>
+            <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">Recently Finished</div>
+            <div className="grid gap-2">
+              {visibleFinished.length === 0 && (
+                <div className="text-gray-500 text-xs">Nothing yet</div>
+              )}
+              {visibleFinished.map(song => (
+                <DraggableFinishedItem key={song.id} track={song} />
+              ))}
+            </div>
+          </section>
+
           </div>
-        </div>
-    </div>
+        </div>  
+      </div>
+    <DragOverlay dropAnimation={null} modifiers={[centerOverlayAtPointer]}>
+      {dragging?.track ? <MiniVinylRecord track={dragging.track} compact /> : null}
+    </DragOverlay>
+  </DndContext>
   )
 }
 

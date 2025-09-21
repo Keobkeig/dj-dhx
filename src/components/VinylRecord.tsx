@@ -51,12 +51,18 @@ export default function VinylRecord({ track }: VinylRecordProps) {
       </div>
 
       {/* Track info */}
-      <div className="mt-4 text-center">
-        <div className="text-sm font-semibold truncate futuristic-font">{track.title}</div>
-        <div className="text-xs text-gray-400 truncate futuristic-font">{track.artist}</div>
-        <div className={`text-xs mt-1 futuristic-font ${
-          track.playing ? 'text-green-400' : 'text-gray-500'
-        }`}>
+      <div className="mt-4 text-center w-48">   {/* lock width same as vinyl */}
+        <div className="text-sm font-semibold truncate futuristic-font w-full">
+          {track.title}
+        </div>
+        <div className="text-xs text-gray-400 truncate futuristic-font w-full">
+          {track.artist}
+        </div>
+        <div
+          className={`text-xs mt-1 futuristic-font ${
+            track.playing ? 'text-green-400' : 'text-gray-500'
+          }`}
+        >
           {track.playing ? 'PLAYING' : 'PAUSED'}
         </div>
       </div>
