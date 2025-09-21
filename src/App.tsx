@@ -6,6 +6,8 @@ import { SongProgress } from '@/components/SongProgress'
 import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react'
 import { audioAnalyzer } from './utils/audioAnalysis'
 import type { AudioAnalysisResult } from './utils/audioAnalysis'
+import { AISection } from './components/AISection'
+import { musicSearchService } from './services/spotifyService'
 
 type PadType = 'drums' | 'bass' | 'melodic' | 'fx' | 'vocal' | 'perc' | 'stop' | 'mute'
 
@@ -69,6 +71,8 @@ function App() {
   ])
   const [masterVolume, ] = useState<number>(0.8)
   const [crossfaderPosition, setCrossfaderPosition] = useState<number>(0.5) // 0 = full left, 1 = full right, 0.5 = center
+  const [aiSearching, setAiSearching] = useState<boolean>(false)
+  const [showAI, setShowAI] = useState<boolean>(false)
 
   // Calculate individual track volumes based on crossfader position
   const leftTrackVolume = masterVolume * (1 - Math.max(0, (crossfaderPosition - 0.5) * 2))
@@ -89,6 +93,72 @@ function App() {
       volume: track.position === 'left' ? leftTrackVolume / masterVolume : rightTrackVolume / masterVolume
     })))
   }, [crossfaderPosition, masterVolume, leftDeckAudio, rightDeckAudio, leftTrackVolume, rightTrackVolume])
+
+  // Handle AI song requests
+  const handleSongRequest = useCallback(async (songQuery: string) => {
+    setAiSearching(true)
+    try {
+      const result = await musicSearchService.findAndDownloadTrack(songQuery)
+
+      // Create a new track from the AI result
+      const newTrack: Track = {
+        id: `ai-${Date.now()}`,
+        title: result.title,
+        artist: result.artist,
+        playing: false,
+        position: 'left', // Default to left deck
+        audioFile: result.url,
+        bpm: 120, // Default, will be analyzed
+        key: 'C', // Default, will be analyzed
+        volume: 1.0,
+        analyzing: true
+      }
+
+      // Add to loaded tracks and analyze
+      setLoadedTracks(prev => [...prev, newTrack])
+
+      // Analyze the track if it's a valid audio file
+      if (result.url && result.source === 'spotify') {
+        try {
+          const analysis = await audioAnalyzer.analyzeURL(result.url)
+
+          // Update the track with analysis results
+          setLoadedTracks(prev => prev.map(track =>
+            track.id === newTrack.id
+              ? { ...track, bpm: analysis.bpm, key: analysis.key, analyzing: false }
+              : track
+          ))
+        } catch (error) {
+          console.error('Error analyzing AI track:', error)
+          setLoadedTracks(prev => prev.map(track =>
+            track.id === newTrack.id
+              ? { ...track, analyzing: false }
+              : track
+          ))
+        }
+      } else {
+        // For YouTube or other sources, just mark as not analyzing
+        setLoadedTracks(prev => prev.map(track =>
+          track.id === newTrack.id
+            ? { ...track, analyzing: false }
+            : track
+        ))
+      }
+
+    } catch (error) {
+      console.error('Error handling AI song request:', error)
+      // Could show a toast or notification here
+    } finally {
+      setAiSearching(false)
+    }
+  }, [])
+
+  // Handle cancelling AI requests
+  const handleCancelRequest = useCallback(() => {
+    setAiSearching(false)
+    // Could also abort any pending fetch requests here
+    console.log('AI search cancelled by user')
+  }, [])
 
   // 8x8 keyboard mapping - each row has unique keys to avoid conflicts (updated)
   const keyMap: { [key: string]: string } = {
@@ -652,6 +722,13 @@ function App() {
         return
       }
 
+      // Handle AI toggle with + key
+      if ((key === '+' || key === '=') && !event.repeat) {
+        event.preventDefault()
+        setShowAI(prev => !prev)
+        return
+      }
+
       // Handle crossfader controls with [ and ]
       if (key === '[') {
         event.preventDefault()
@@ -813,6 +890,14 @@ function App() {
         </div>
       </div>
 
+      {/* AI Section */}
+      <AISection
+        onSongRequest={handleSongRequest}
+        onCancelRequest={handleCancelRequest}
+        isSearching={aiSearching}
+        isVisible={showAI}
+      />
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -915,6 +1000,7 @@ function App() {
             <div className="text-gray-400 text-sm space-x-2 futuristic-font">
               <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">?</kbd> for help</span>
               <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">~</kbd> for BPM guide</span>
+              <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">+</kbd> for AI</span>
             </div>
           </div>
         </div>
@@ -976,6 +1062,15 @@ function App() {
                 <ul className="space-y-1 ml-4">
                   <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">[</kbd> Move crossfader left</li>
                   <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">]</kbd> Move crossfader right</li>
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-white mb-2">AI Assistant:</h3>
+                <ul className="space-y-1 ml-4">
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">+</kbd> Toggle AI assistant menu</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">-</kbd> Toggle voice listening (when AI open)</li>
+                  <li>• <kbd className="px-1 py-0.5 bg-gray-700 rounded text-xs">Backspace</kbd> Cancel AI search</li>
+                  <li>• Say "Can you play [song name]" to search and download</li>
                 </ul>
               </div>
             </div>
