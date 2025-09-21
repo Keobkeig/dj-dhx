@@ -1,3 +1,5 @@
+import React from "react";
+import type { CSSProperties } from 'react';
 import { useState, useCallback, useEffect, useRef } from 'react'
 import './App.css'
 import PulsatingButton from '@/components/ui/pulsating-button'
@@ -8,11 +10,8 @@ import { audioAnalyzer } from './utils/audioAnalysis'
 import type { AudioAnalysisResult } from './utils/audioAnalysis'
 import { AISection } from './components/AISection'
 import { musicSearchService } from './services/spotifyService'
-import {
-  DndContext,
-  useDroppable,
-  DragOverlay
-} from '@dnd-kit/core'
+import { DndContext, useDroppable, DragOverlay, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, pointerWithin } from '@dnd-kit/core'
+import { snapCenterToCursor, restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import { useDraggable } from '@dnd-kit/core'
 import type { DragEndEvent, Modifier } from '@dnd-kit/core'
 import {
@@ -80,6 +79,13 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentDeck, setCurrentDeck] = useState<'left' | 'right'>('left')
   const [dragging, setDragging] = useState<{ track?: Track } | null>(null)
+  const [queueInsertIndex, setQueueInsertIndex] = useState<number | null>(null);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(KeyboardSensor)
+  );
+  const [queueSlotOver, setQueueSlotOver] = useState<number | null>(null);
   
   const [, ] = useState([
     { title: "Uptown Funk", artist: "Bruno Mars", status: "playing" },
@@ -1207,13 +1213,18 @@ function App() {
     track,
     index
   }: { track: Track; index: number }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = 
-      useSortable({ id: track.id, data: { from: 'queue', index, track } })
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-      opacity: isDragging ? 0.6 : 1
-    }
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+      useSortable({
+        id: track.id,
+        data: { from: 'queue', index, track },
+        // Prevent dnd-kit from animating layout shifts while sorting
+        animateLayoutChanges: () => false,
+      })
+      const style: CSSProperties = {
+        // keep the original row fully visible and stationary during drag
+        opacity: 1
+        // (intentionally omit transform/transition so there is no live preview)
+      };
 
     return (
       <div
@@ -1221,11 +1232,11 @@ function App() {
         style={style}
         {...attributes}
         {...listeners}
-        className="p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 cursor-grab select-none border border-transparent"
+        className="w-full min-w-0 overflow-hidden p-2 rounded bg-gray-800/50 hover:bg-gray-700/50 cursor-grab select-none border border-transparent"
         title={`${track.title} — ${track.artist}`}
       >
-        <div className="text-white text-sm font-medium truncate">{track.title}</div>
-        <div className="text-gray-400 text-xs truncate">{track.artist}</div>
+        <div className="text-white text-sm font-medium truncate whitespace-nowrap">{track.title}</div>
+        <div className="text-gray-400 text-xs truncate whitespace-nowrap">{track.artist}</div>
         <div className="text-gray-500 text-xs">{track.bpm} BPM • {track.key}</div>
       </div>
     )
@@ -1341,8 +1352,30 @@ function App() {
 
     // 3) Deck -> Queue (drop on container to append)
     if ((from === 'deck-left' || from === 'deck-right') && overId === 'queue-dropzone') {
-      stopDeckAndReturnToQueue(from === 'deck-left' ? 'left' : 'right', queue.length)
-      return
+      const insertAt = (queueInsertIndex ?? queue.length);   // <— changed
+      stopDeckAndReturnToQueue(from === 'deck-left' ? 'left' : 'right', insertAt);
+      return;
+    }
+
+    if (from === 'finished') {
+      const draggedId = trackId ?? activeId;
+      const dragged = recentlyFinished.find(t => t.id === draggedId);
+      if (!dragged) return;
+
+      if (overId === 'queue-dropzone') {
+        const insertAt = (queueInsertIndex ?? visibleQueue.length); // <— changed
+        setQueue(prev => {
+          const withoutDup = prev.filter(t => t.id !== dragged.id);
+          const clamped = Math.max(0, Math.min(insertAt, withoutDup.length));
+          return [
+            ...withoutDup.slice(0, clamped),
+            dragged,
+            ...withoutDup.slice(clamped),
+          ];
+        });
+        return;
+      }
+      // (drop-on-item case below stays the same)
     }
 
     // 3b) Deck -> Queue (drop on item to insert)
@@ -1462,7 +1495,11 @@ function App() {
   function QueueDropZone({ children }: { children: React.ReactNode }) {
     const { setNodeRef, isOver } = useDroppable({ id: 'queue-dropzone' })
     return (
-      <div ref={setNodeRef} className={isOver ? 'ring-2 ring-blue-500 rounded-md' : ''}>
+      <div
+        ref={setNodeRef}
+        className={`rounded-md pointer-events-auto ${isOver ? 'ring-2 ring-blue-500' : 'ring-1 ring-transparent'}`}
+        style={{ paddingTop: 4, paddingBottom: 4, minHeight: 8 }}
+      >
         {children}
       </div>
     )
@@ -1495,39 +1532,71 @@ const makeEmptyDeckTrack = (position: 'left' | 'right'): Track => ({
 const visibleQueue = queue.filter(t => !deckIds.has(t.id))
 const visibleFinished = recentlyFinished.filter(t => !deckIds.has(t.id))
 
+function QueueInsertSlot({ index, active }: { index: number; active: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: `queue-slot-${index}` });
+  const show = active || isOver;
+
   return (
-  <DndContext
-    onDragStart={(evt) => {
-      const { active } = evt
-      const data = active.data?.current as any
-      let t: Track | undefined = data?.track
+    <div ref={setNodeRef} className="relative select-none w-full">
+      {/* visible line */}
+      <div className={`mx-1 ${show ? 'h-3 bg-white rounded-sm' : 'h-3 bg-transparent'}`} />
+      <div className="absolute inset-x-0 -top-3 -bottom-3" />
+    </div>
+  );
+}
 
-      // Fallback lookup (keeps your existing behavior)
-      if (!t) {
-        const activeId = String(active.id)
-        t =
-          (leftDeckTrack && activeId.includes(leftDeckTrack.id) && leftDeckTrack) ||
-          (rightDeckTrack && activeId.includes(rightDeckTrack.id) && rightDeckTrack) ||
-          queue.find(q => q.id === activeId) ||
-          recentlyFinished.find(r => r.id === activeId)
-      }
-      if (t) setDragging({ track: t })
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragOver={(evt) => {
+        const { over } = evt;
+        if (!over) { setQueueSlotOver(null); return; }
+        const m = String(over.id).match(/^queue-slot-(\d+)$/);
+        setQueueSlotOver(m ? parseInt(m[1], 10) : null);
+      }}
+      onDragEnd={(evt) => {
+        const { active, over } = evt;
+        const slotMatch = over ? String(over.id).match(/^queue-slot-(\d+)$/) : null;
+        const insertAt = slotMatch ? parseInt(slotMatch[1], 10) : null;
+        setQueueSlotOver(null);
+        if (insertAt === null) return;
 
-      // NEW: record pointer offset inside the node at activation
-      const init = active.rect.current?.initial;
-      const e = evt.activatorEvent;
-      if (init && (e instanceof MouseEvent || e instanceof PointerEvent)) {
-        dragAnchorRef.current = {
-          x: e.clientX - init.left,
-          y: e.clientY - init.top,
-        };
-      } else {
-        dragAnchorRef.current = null;
-      }
-    }}
-    onDragEnd={handleDragEnd}
-    onDragCancel={() => { setDragging(null); dragAnchorRef.current = null }}
-  >
+        const from = active.data?.current?.from as 'queue' | 'deck-left' | 'deck-right' | 'finished' | undefined;
+        const draggedId = (active.data?.current?.trackId ?? active.id) as string;
+
+        const clamp = (i: number) => Math.max(0, Math.min(i, visibleQueue.length));
+        const idx = clamp(insertAt);
+
+        if (from === 'queue') {
+          // reorder within queue
+          setQueue(prev => {
+            const curIndex = prev.findIndex(t => t.id === draggedId);
+            if (curIndex < 0) return prev;
+            const without = prev.filter((_, i) => i !== curIndex);
+            const target = idx > curIndex ? idx - 1 : idx;
+            return [...without.slice(0, target), prev[curIndex], ...without.slice(target)];
+          });
+          return;
+        }
+
+        if (from === 'deck-left' || from === 'deck-right') {
+          stopDeckAndReturnToQueue(from === 'deck-left' ? 'left' : 'right', idx);
+          return;
+        }
+
+        if (from === 'finished') {
+          const dragged = recentlyFinished.find(t => t.id === draggedId);
+          if (!dragged) return;
+          setQueue(prev => {
+            const withoutDup = prev.filter(t => t.id !== dragged.id);
+            return [...withoutDup.slice(0, idx), dragged, ...withoutDup.slice(idx)];
+          });
+          return;
+        }
+      }}
+      onDragCancel={() => setQueueSlotOver(null)}
+      >
       <div className="min-h-screen w-full bg-black text-white flex flex-col items-center justify-center p-4">
         {/* Dual Progress Bars */}
         <SongProgress
@@ -1905,16 +1974,23 @@ const visibleFinished = recentlyFinished.filter(t => !deckIds.has(t.id))
           {/* In Queue (sortable) */}
           <section>
             <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">In Queue</div>
-            <QueueDropZone>
-              <SortableContext items={visibleQueue.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                <div className="grid gap-2">
-                  {visibleQueue.length === 0 && <div className="text-gray-500 text-xs">Queue is empty</div>}
-                  {visibleQueue.map((song, index) => (
-                    <SortableQueueItem key={song.id} track={song} index={index} />
-                  ))}
-                </div>
-              </SortableContext>
-            </QueueDropZone>
+
+            {/* No outer droppable container here */}
+            <SortableContext
+              items={visibleQueue.map(t => t.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {/* slot at index 0 (top) */}
+              <QueueInsertSlot index={0} active={queueSlotOver === 0} />
+
+              {visibleQueue.map((track, i) => (
+                <React.Fragment key={track.id}>
+                  <SortableQueueItem track={track} index={i} />
+                  {/* slot after item i => index i+1 */}
+                  <QueueInsertSlot index={i + 1} active={queueSlotOver === i + 1} />
+                </React.Fragment>
+              ))}
+            </SortableContext>
           </section>
 
           {/* Recently Finished (draggable into queue) */}
@@ -1933,7 +2009,7 @@ const visibleFinished = recentlyFinished.filter(t => !deckIds.has(t.id))
           </div>
         </div>  
       </div>
-    <DragOverlay dropAnimation={null} modifiers={[centerOverlayAtPointer]}>
+    <DragOverlay dropAnimation={null} modifiers={[snapCenterToCursor, restrictToVerticalAxis]}>
       {dragging?.track ? <MiniVinylRecord track={dragging.track} compact /> : null}
     </DragOverlay>
   </DndContext>
