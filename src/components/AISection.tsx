@@ -96,6 +96,7 @@ export const AISection: React.FC<AISectionProps> = ({
         event.preventDefault()
         event.stopPropagation()
         onCancelRequest()
+        setStatus('Ready')
         stopListening()
         return
       }
@@ -245,17 +246,9 @@ YouTube URL:`
     return youtubeUrl
   }
 
-  const startListening = async () => {
-    if (!recognitionRef.current) return
-
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true })
-      recognitionRef.current.start()
-    } catch (error) {
-      console.error('Microphone permission error:', error)
-      setStatus('Mic permission denied')
-    }
-  }
+  const startListening = () => {
+    recognitionRef.current?.start();
+  };
 
   const stopListening = () => {
     setIsListening(false)
