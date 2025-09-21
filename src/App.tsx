@@ -408,7 +408,7 @@ function App() {
         // Currently paused - resume it
         deckAudio.play().catch(console.error)
         setTracks(prev => prev.map(track =>
-          track.position === targetPosition ? { ...track, playing: false } : track
+          track.position === targetPosition ? { ...track, playing: true } : track
         ))
       }
       return

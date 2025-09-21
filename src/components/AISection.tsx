@@ -64,6 +64,49 @@ export const AISection: React.FC<AISectionProps> = ({
     }
   }, [])
 
+
+  const toggleListening = () => {
+    if (isListening) {
+      stopListening()
+    } else {
+      startListening()
+    }
+  }
+
+  // Handle keyboard shortcuts when AI is visible
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (!isVisible) return
+
+      // Ignore events from input fields
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      // Handle - key to toggle listening
+      if (event.key === '-' && !event.repeat) {
+        event.preventDefault()
+        event.stopPropagation()
+        toggleListening()
+        return
+      }
+
+      // Handle backspace for cancelling requests
+      if (event.key === 'Backspace' && isSearching) {
+        event.preventDefault()
+        event.stopPropagation()
+        onCancelRequest()
+        stopListening()
+        return
+      }
+    }
+
+    if (isVisible) {
+      window.addEventListener('keydown', handleKeyPress, { capture: true })
+      return () => window.removeEventListener('keydown', handleKeyPress, { capture: true })
+    }
+  }, [isVisible, isSearching, isListening, onCancelRequest])
+
   // Do NOT auto-start on open. Only stop when panel is hidden.
   useEffect(() => {
     if (!isVisible && isListening) {
