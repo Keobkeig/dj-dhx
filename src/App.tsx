@@ -507,7 +507,7 @@ function App() {
   useEffect(() => {
     const initialPads: Pad[] = []
 
-    // Updated keyRows for all 8 rows (including STOP and MUTE)
+    // Updated keyRows for all 8 rows (including MUTE)
     const keyRows = [
       ['1', '2', '3', '4', '5', '6', '7', '8'],      // Row 0
       ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i'],      // Row 1
@@ -529,7 +529,8 @@ function App() {
         '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Kick.wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (ariana).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah-2).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah-2).wav',
+        '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Kick.mp3'
       ],
 
       // Column 1: Snares (Orange - DRUMS)
@@ -539,7 +540,8 @@ function App() {
         '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Snare.wav',
         '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Snare.wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana-2).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana-2).wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Snare.wav'
       ],
 
       // Column 2: Hats (Orange - DRUMS)
@@ -549,7 +551,8 @@ function App() {
         '/Coffee Shop Loop Kit/Simple Things - 94 BPM/Simple Things - 94 BPM Hats.wav',
         '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Hats.wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav',
+        '/Coffee Shop Loop Kit/Groovy Vynil - 94 BPM/Groovy Vynil - 94 BPM Hats.wav'
       ],
 
       // Column 3: Percussion (Orange - DRUMS)
@@ -559,7 +562,8 @@ function App() {
         '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Perc.wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-1).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-2).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-3).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-3).wav',
+        '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Bells.wav'
       ],
 
       // Column 4: Keys/Piano (Purple - MELODIC)
@@ -569,7 +573,8 @@ function App() {
         '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Trumpet.wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (By Your Side).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Ed session).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Ed session).wav',
+        '/Coffee Shop Loop Kit/Foggy Dreams - C Major 85 BPM/Foggy Dreams - C Major 85 BPM Pad.mp3'
       ],
 
       // Column 5: Bells/Synths (Purple - MELODIC)
@@ -579,7 +584,8 @@ function App() {
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Mariah).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ODB session - 1998).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (for sweetener album).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana-2).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana-2).wav',
+        '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Distorted Synth.wav'
       ],
 
       // Column 6: Bass/Low End (Green - BASS)
@@ -589,7 +595,8 @@ function App() {
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Solange session).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Jay Z).wav',
         '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav'
+        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
+        '/Coffee Shop Loop Kit/Hot Pot Coffee - C# Major 85 BPM/Hot Pot Coffee - C# Major 85 BPM Pad.wav'
       ],
 
       // Column 7: Full Songs (Cyan - FULL TRACKS)
@@ -600,92 +607,10 @@ function App() {
         '/Coffee Shop Loop Kit/Febuary - 78 BPM/Febuary - 78 BPM Full.wav',
         '/Coffee Shop Loop Kit/Train Station - C Major 103 BPM/Train Station - C Major 103 BPM Full.wav',
         '/Coffee Shop Loop Kit/Blanket - C Major 92 BPM/Blanket - C Major 92 BPM Full.wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav'
+        '/Coffee Shop Loop Kit/Hot Pot Coffee - C# Major 85 BPM/Hot Pot Coffee - C# Major 85 BPM Full.wav'
       ]
     }
 
-    // COMMENTED OUT - Pharrell Williams Production Kit sound mappings
-    /*
-    const pharrellSounds = {
-      // Orange: Drums (loops) - Various drum elements
-      drums: [
-        // Kicks
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Blurred Lines).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (808).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Ariana-thump).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Madonna).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Kicks/Kick (Superthug).wav',
-        // Snares
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snares/Snare (Ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snares/Snare (Neptunes).wav',
-        // Closed Hats
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Mariah).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Closed Hats/Hat (Jay Z).wav',
-        // Open Hats
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Open Hats/Open Hat (Mariah).wav',
-        // Claps & Snaps
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Claps/Clap (Ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Claps/Clap (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Snaps/Snap (Ariana-2).wav',
-        // 808s
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/808s/808 (Ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/808s/808 (Mariah).wav',
-        // Percussion
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Timpani (Movie).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Bells/Bell (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Bongos/Bongo (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Congas/Conga (ariana).wav'
-      ],
-
-      // Green: Bass (loops)
-      bass: [
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Blurred Lines).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Mariah).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Snoop).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Nelly).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (Super synthy).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass (upright-ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Bass/Bass Lick (Blurred).wav'
-      ],
-
-      // Purple: Melodic (loops) - Synths, Pads, Guitars
-      melodic: [
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (NERD).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Mariah).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Britney).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth (Megan).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth Short (Britney).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Pads/Pad (ariana-angelic).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Pads/Pad (Mariah).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Guitars/Guitar (Mariah).wav'
-      ],
-
-      // Cyan: FX (one-shots)
-      fx: [
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/Siren SFX (Neptunes).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/Cellphone SFX (fabo).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/SFX/SFX (Ed session).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Instruments/Synths/Synth sfx (bey session).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Shakers/Shaker (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Tambourines/Tambourine (ariana).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-1).wav',
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Drums/Percussion/Blocks/Kitchen Sound (Madonna-2).wav'
-      ],
-
-      // Pink: Vocals (one-shots)
-      vocals: [
-        '/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Vocals/Vox (Sing).wav',
-        "/Pharell Williams Drums/Pharrell Williams Production Kit (Organized)/Vocals/Vox (yo thoughts ain't my thoughts).wav"
-      ]
-    }
-    */
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
@@ -694,16 +619,12 @@ function App() {
         let keyBinding = ''
         let label = ''
 
-        if (row === 6) {
-          // Row 6: STOP pads for each column
-          soundType = 'stop'
-          label = 'STOP'
-        } else if (row === 7) {
+        if (row === 7) {
           // Row 7: MUTE pads for each column
           soundType = 'mute'
           label = 'MUTE'
         } else {
-          // Rows 0-5: 48 sounds (6 rows × 8 columns) using Pharrell sounds
+          // Rows 0-6: 56 sounds (7 rows × 8 columns)
           const soundIndex = row * 8 + col
 
           // Organized Coffee Shop + Pharrell by sound type
@@ -810,21 +731,7 @@ function App() {
       })
     }, 150)
 
-    if (pad.type === 'stop') {
-      // Stop all loops in this channel and stop their audio
-      setPads(prev => prev.map(p => {
-        if (p.channel === pad.channel && !p.isOneShot && p.active) {
-          if (p.soundFile) stopAudio(p.soundFile)
-          return { ...p, active: false }
-        }
-        return p
-      }))
-      setActiveChannels(prev => {
-        const newChannels = [...prev]
-        newChannels[pad.channel] = false
-        return newChannels
-      })
-    } else if (pad.type === 'mute') {
+    if (pad.type === 'mute') {
       // Toggle mute for this channel
       setMutedChannels(prev => {
         const newMuted = [...prev]
@@ -865,8 +772,8 @@ function App() {
             }
             return { ...p, active: newActive }
           }
-          // Stop all other loop pads in the same column (not stop/mute pads or one-shots)
-          if (p.channel === pad.channel && p.type !== 'stop' && p.type !== 'mute' && p.id !== pad.id && p.active && !p.isOneShot) {
+          // Stop all other loop pads in the same column (not mute pads or one-shots)
+          if (p.channel === pad.channel && p.type !== 'mute' && p.id !== pad.id && p.active && !p.isOneShot) {
             if (p.soundFile) stopAudio(p.soundFile)
             return { ...p, active: false }
           }
@@ -1045,7 +952,6 @@ function App() {
       fx: shiftPressed ? 'bg-cyan-700' : 'bg-cyan-500',
       vocal: shiftPressed ? 'bg-pink-700' : 'bg-pink-500',
       perc: shiftPressed ? 'bg-yellow-700' : 'bg-yellow-500',
-      stop: 'bg-red-600',
       mute: 'bg-gray-600'
     }
 
@@ -1061,7 +967,7 @@ function App() {
     }
 
     // Muted channels effect
-    if (mutedChannels[pad.channel] && pad.type !== 'stop' && pad.type !== 'mute') {
+    if (mutedChannels[pad.channel] && pad.type !== 'mute') {
       colorClass += ' opacity-50'
     }
 
@@ -1167,8 +1073,7 @@ function App() {
                                 pad.type === 'melodic' ? '#a855f7' :
                                 pad.type === 'fx' ? '#06b6d4' :
                                 pad.type === 'vocal' ? '#ec4899' :
-                                pad.type === 'perc' ? '#eab308' :
-                                pad.type === 'stop' ? '#ef4444' : '#6b7280'
+                                pad.type === 'perc' ? '#eab308' : '#6b7280'
 
               const commonProps = {
                 onClick: () => handlePadClick(pad),
