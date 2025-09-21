@@ -502,7 +502,7 @@ function App() {
     })
   }, [audioElements])
 
-  // Initialize 8x8 grid with sounds + stop/mute, new keyRows mapping
+  // Initialize 8x8 grid with hardcoded drum folder paths
   useEffect(() => {
     const initialPads: Pad[] = []
 
@@ -517,6 +517,14 @@ function App() {
       ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'L'],      // Row 6
       ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '<']       // Row 7
     ]
+
+    // Hardcoded sound file mappings
+    const drumSounds = {
+      kicks: ['/Drums/Kicks/1.wav', '/Drums/Kicks/2.wav', '/Drums/Kicks/3.wav', '/Drums/Kicks/4.wav', '/Drums/Kicks/5.wav', '/Drums/Kicks/6.wav'],
+      snares: ['/Drums/Snares/1.wav', '/Drums/Snares/2.wav', '/Drums/Snares/3.wav', '/Drums/Snares/4.wav', '/Drums/Snares/5.wav', '/Drums/Snares/6.wav'],
+      hats: ['/Drums/Closed Hats/1.wav', '/Drums/Closed Hats/2.wav', '/Drums/Open Hats/1.wav', '/Drums/Open Hats/2.wav', '/Drums/Claps/1.wav', '/Drums/Claps/2.wav'],
+      percussion: ['/Drums/Percussion/1.wav', '/Drums/Percussion/2.wav', '/Drums/Snaps/1.wav', '/Drums/Snaps/2.wav', '/Drums/808s/1.wav', '/Drums/808s/2.wav']
+    }
 
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
@@ -535,35 +543,39 @@ function App() {
           label = 'MUTE'
         } else {
           // Rows 0-5: 48 sounds (6 rows × 8 columns)
-          const soundIndex = (row * 8) + col + 1
-          const basePath = '/Viral Hip Hop Project/Samples/Imported/'
+          const soundIndex = row * 8 + col
 
           // Organize sounds by type across the grid
-          if (col < 2) {
-            // Columns 0-1: DRUMS
+          if (col === 0) {
+            // Column 0: KICKS
             soundType = 'drums'
-            label = `DRUMS ${soundIndex}`
-            soundFile = `${basePath}DRUMS ${((soundIndex - 1) % 6) + 1}.wav`
+            label = `KICK ${row + 1}`
+            soundFile = drumSounds.kicks[row % drumSounds.kicks.length]
+          } else if (col === 1) {
+            // Column 1: SNARES & CLAPS
+            soundType = 'drums'
+            label = row < 3 ? `SNARE ${row + 1}` : `CLAP ${row - 2}`
+            soundFile = row < 3 ? drumSounds.snares[row % drumSounds.snares.length] : drumSounds.hats[(row - 3) % drumSounds.hats.length]
           } else if (col === 2) {
-            // Column 2: BASS
+            // Column 2: BASS & 808s
             soundType = 'bass'
-            label = `BASS ${soundIndex}`
-            soundFile = `${basePath}BASS ${((soundIndex - 1) % 6) + 1}.wav`
+            label = `BASS ${row + 1}`
+            soundFile = `/Bass/${(row % 6) + 1}.wav`
           } else if (col < 5) {
             // Columns 3-4: MELODIC
             soundType = 'melodic'
-            label = `MELODIC ${soundIndex}`
-            soundFile = `${basePath}MELODICS ${((soundIndex - 1) % 12) + 1}.wav`
+            label = `MELODIC ${soundIndex + 1}`
+            soundFile = `/Melodic/${((soundIndex) % 12) + 1}.wav`
           } else if (col < 7) {
             // Columns 5-6: FX
             soundType = 'fx'
-            label = `FX ${soundIndex}`
-            soundFile = `${basePath}FX ${((soundIndex - 1) % 12) + 1}.wav`
+            label = `FX ${soundIndex + 1}`
+            soundFile = `/FX/${((soundIndex) % 12) + 1}.wav`
           } else {
             // Column 7: VOCAL
             soundType = 'vocal'
-            label = `VOCAL ${soundIndex}`
-            soundFile = `${basePath}FREE ${((soundIndex - 1) % 6) + 1}.wav`
+            label = `VOCAL ${row + 1}`
+            soundFile = `/Vocals/${(row % 6) + 1}.wav`
           }
         }
 
