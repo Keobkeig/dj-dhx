@@ -91,3 +91,28 @@ input[type="range"]::-moz-range-thumb {
   border: 2px solid #4b5563;
   cursor: pointer;
 }
+
+.queue-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #22c55e #0f172a;
+  scrollbar-gutter: stable;              /* reserve space only on the right, not both sides */
+  overscroll-behavior-y: contain;
+}
+
+.queue-scroll::-webkit-scrollbar { width: 8px; }            /* was 10px */
+.queue-scroll::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.75);
+  border-radius: 9999px;
+  margin: 2px;                                              /* was 4px */
+}
+.queue-scroll::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #22c55e, #06b6d4);
+  border: 1px solid rgba(15, 23, 42, 0.85);                 /* was 2px */
+}
+.queue-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #34d399, #22d3ee); /* brighter on hover */
+}
+.queue-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+} 

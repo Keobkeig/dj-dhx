@@ -2023,7 +2023,7 @@ function QueueInsertSlot({ index, active }: { index: number; active: boolean }) 
             </div>
           </div>
 
-          <div className="space-y-4 max-h-80 overflow-y-auto overflow-x-hidden pr-1 min-w-0">
+          <div className="queue-scroll space-y-4 max-h-80 overflow-y-auto overflow-x-hidden pr-1 min-w-0">
           {/* Currently Playing */}
           <section>
             <div className="text-xs uppercase tracking-wider text-gray-400 mb-2">Currently Playing</div>
