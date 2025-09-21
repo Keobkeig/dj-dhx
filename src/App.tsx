@@ -700,7 +700,6 @@ function App() {
         })
         return
       }
-
       // Handle help modal
       if (key === '?' || key === '/') {
         event.preventDefault()
@@ -997,7 +996,7 @@ function App() {
                 ⏸ PAUSED - Press SPACEBAR to resume
               </div>
             )}
-            <div className="text-gray-400 text-sm space-x-2 futuristic-font">
+            <div className="text-gray-400 text-sm space-x-2 futuristic-font flex flex-wrap items-center justify-center gap-2">
               <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">?</kbd> for help</span>
               <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">~</kbd> for BPM guide</span>
               <span>Press <kbd className="px-1 py-0.5 bg-gray-800 rounded text-white text-xs futuristic-font">+</kbd> for AI</span>
