@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { Mic, MicOff, X, Bot } from 'lucide-react'
+import { Mic, MicOff, X } from 'lucide-react'
 
 interface AISectionProps {
   onSongRequest: (songQuery: string) => void
@@ -42,12 +42,17 @@ declare var SpeechRecognition: {
   new(): SpeechRecognition
 }
 
-export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelRequest, isSearching = false, isVisible = false }) => {
+export const AISection: React.FC<AISectionProps> = ({ 
+  onSongRequest, 
+  onCancelRequest, 
+  isSearching = false, 
+  isVisible = false 
+}) => {
   const [isListening, setIsListening] = useState(false)
   const [status, setStatus] = useState('Ready')
   const [liveTranscript, setLiveTranscript] = useState('')
   const [lastCommand, setLastCommand] = useState('')
-  // Remove isExpanded state since it's now controlled by parent
+  const [isProcessing, setIsProcessing] = useState(false)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   useEffect(() => {
@@ -59,149 +64,134 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
     }
   }, [])
 
-  // Auto-start listening when AI becomes visible
-  useEffect(() => {
-    if (isVisible && recognitionRef.current && !isListening && !isSearching) {
-      console.log('AI opened - auto-starting listening...')
-      startListening()
-    } else if (!isVisible && isListening) {
-      console.log('AI closed - stopping listening...')
-      stopListening()
-    }
-  }, [isVisible])
-
   const initializeSpeechRecognition = () => {
-    console.log('🎤 Initializing speech recognition...')
-    console.log('SpeechRecognition in window:', 'SpeechRecognition' in window)
-    console.log('webkitSpeechRecognition in window:', 'webkitSpeechRecognition' in window)
-    console.log('Current protocol:', window.location.protocol)
-    console.log('User agent:', navigator.userAgent)
-
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      if (window.location.protocol === 'http:' && window.location.hostname !== 'localhost') {
-        setStatus('Speech requires HTTPS')
-      } else {
-        setStatus('Speech not supported - try Chrome/Edge')
-      }
+      setStatus('Speech not supported - try Chrome/Edge')
       return
     }
 
     try {
       const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition
       const recognition = new SpeechRecognitionClass()
-      console.log('✅ Speech recognition class created')
 
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'en-US'
+      recognition.continuous = false
+      recognition.interimResults = true
+      recognition.lang = 'en-US'
 
-    recognition.onstart = () => {
-      setIsListening(true)
-      setStatus('Listening...')
-    }
+      recognition.onstart = () => {
+        setIsListening(true)
+        setStatus('Listening...')
+      }
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let finalTranscript = ''
-      let interimTranscript = ''
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let finalTranscript = ''
+        let interimTranscript = ''
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
-        if (event.results[i].isFinal) {
-          finalTranscript += transcript
-        } else {
-          interimTranscript += transcript
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript
+          } else {
+            interimTranscript += transcript
+          }
+        }
+
+        const fullTranscript = finalTranscript + interimTranscript
+        setLiveTranscript(fullTranscript)
+
+        if (finalTranscript) {
+          handleSpeechResult(finalTranscript.trim())
         }
       }
 
-      // Update live transcript for real-time display
-      const fullTranscript = finalTranscript + interimTranscript
-      setLiveTranscript(fullTranscript)
-
-      if (finalTranscript) {
-        handleSpeechResult(finalTranscript.trim())
+      recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+        console.error('Speech recognition error:', event.error)
+        setStatus(`Speech error: ${event.error}`)
+        setIsListening(false)
       }
-    }
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-      console.error('🚨 Speech recognition error:', event.error)
-
-      switch (event.error) {
-        case 'network':
-          console.log('🌐 Network error - Google speech service issue')
-          setStatus('Network error - try refreshing page')
-          setIsListening(false)
-          break
-        case 'not-allowed':
-          console.log('🚫 Microphone permission denied')
-          setStatus('Please allow microphone access')
-          setIsListening(false)
-          break
-        case 'no-speech':
-          console.log('🔇 No speech detected - continuing...')
-          setStatus('Listening...')
-          // Don't stop for no-speech errors
-          break
-        case 'audio-capture':
-          console.log('🎤 Microphone capture failed')
-          setStatus('Microphone unavailable')
-          setIsListening(false)
-          break
-        case 'service-not-allowed':
-          console.log('🔒 Speech service blocked')
-          setStatus('Speech service blocked - check settings')
-          setIsListening(false)
-          break
-        default:
-          console.log('❓ Unknown speech error:', event.error)
-          setStatus(`Speech error: ${event.error}`)
-          setIsListening(false)
-      }
-    }
-
-    recognition.onend = () => {
-      // Don't automatically stop listening - let user control it
-      console.log('Recognition ended, restarting...')
-      if (isListening && recognitionRef.current) {
-        // Restart recognition to keep listening
-        try {
-          recognitionRef.current.start()
-        } catch (error) {
-          console.log('Recognition restart failed:', error)
-          setIsListening(false)
+      recognition.onend = () => {
+        setIsListening(false)
+        if (!isProcessing) {
           setStatus('Ready')
         }
       }
-    }
 
-    recognitionRef.current = recognition
-    setStatus('Ready - Click Listen to start')
+      recognitionRef.current = recognition
+      setStatus('Ready - Click to speak')
     } catch (error) {
       console.error('Error initializing speech recognition:', error)
       setStatus('Speech initialization failed')
     }
   }
 
-  const handleSpeechResult = (transcript: string) => {
-    const lowerTranscript = transcript.toLowerCase()
+  const handleSpeechResult = async (transcript: string) => {
     setLastCommand(transcript)
-    setLiveTranscript('') // Clear live transcript after processing
+    setLiveTranscript('')
+    setIsProcessing(true)
+    setStatus('Finding music on YouTube...')
 
-    // Check for trigger phrase "can you play" with YouTube URL
-    const playMatch = lowerTranscript.match(/can you play (.+?)(?:\?|$)/i)
-    if (playMatch) {
-      const urlQuery = playMatch[1].trim()
-
-      // Check if it's a YouTube URL
-      if (urlQuery.includes('youtube.com/watch') || urlQuery.includes('youtu.be/')) {
-        setStatus(`Converting YouTube video...`)
-        onSongRequest(urlQuery)
-        console.log('YouTube URL command processed, continuing to listen...')
-      } else {
-        setStatus('❌ Only YouTube URLs supported')
-        setTimeout(() => setStatus('Listening...'), 3000)
-        console.log('Non-YouTube URL rejected:', urlQuery)
-      }
+    try {
+      // Call LLM to get YouTube URL
+      const youtubeUrl = await callLLMForYouTube(transcript)
+      setStatus('Converting to MP3...')
+      
+      // Send to converter
+      onSongRequest(youtubeUrl)
+    } catch (error) {
+      console.error('Failed to process request:', error)
+      setStatus('Failed to find music')
+      setTimeout(() => {
+        setStatus('Ready')
+        setIsProcessing(false)
+      }, 3000)
     }
+  }
+
+  const callLLMForYouTube = async (query: string): Promise<string> => {
+    const openaiApiKey = import.meta.env.VITE_OPENAI_API_KEY
+    
+    if (!openaiApiKey) {
+      throw new Error('OpenAI API key not found')
+    }
+
+    const prompt = `Find a YouTube URL for the music request: "${query}"
+
+Return ONLY a YouTube URL in this format: https://www.youtube.com/watch?v=VIDEO_ID
+
+Examples:
+- "jazz music" → https://www.youtube.com/watch?v=vmDDOFXSgAs
+- "bohemian rhapsody" → https://www.youtube.com/watch?v=fJ9rUzIMcZQ
+- "the beatles" → https://www.youtube.com/watch?v=ZbZSe6N_BXs
+
+YouTube URL:`
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-3.5-turbo',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 100,
+        temperature: 0.3
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    const youtubeUrl = data.choices[0].message.content.trim()
+    
+    if (!youtubeUrl.includes('youtube.com/watch') && !youtubeUrl.includes('youtu.be/')) {
+      throw new Error('Invalid YouTube URL received')
+    }
+
+    return youtubeUrl
   }
 
   const startListening = async () => {
@@ -219,53 +209,24 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
   const stopListening = () => {
     setIsListening(false)
     setLiveTranscript('')
-    setStatus('Ready')
     if (recognitionRef.current) {
       recognitionRef.current.stop()
     }
   }
 
-  const toggleListening = () => {
-    if (isListening) {
-      stopListening()
-    } else {
-      startListening()
-    }
+  const handleCancel = () => {
+    setIsProcessing(false)
+    setStatus('Ready')
+    onCancelRequest()
   }
 
-  // Handle keyboard shortcuts when AI is visible
+  // Handle when conversion completes
   useEffect(() => {
-    const handleKeyPress = (event: KeyboardEvent) => {
-      if (!isVisible) return
-
-      // Ignore events from input fields
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return
-      }
-
-      // Handle - key to toggle listening
-      if (event.key === '-' && !event.repeat) {
-        event.preventDefault()
-        event.stopPropagation()
-        toggleListening()
-        return
-      }
-
-      // Handle backspace for cancelling requests
-      if (event.key === 'Backspace' && isSearching) {
-        event.preventDefault()
-        event.stopPropagation()
-        onCancelRequest()
-        stopListening()
-        return
-      }
+    if (!isSearching && isProcessing) {
+      setIsProcessing(false)
+      setStatus('Ready')
     }
-
-    if (isVisible) {
-      window.addEventListener('keydown', handleKeyPress, { capture: true })
-      return () => window.removeEventListener('keydown', handleKeyPress, { capture: true })
-    }
-  }, [isVisible, isSearching, isListening, onCancelRequest])
+  }, [isSearching, isProcessing])
 
   return (
     <div className={`fixed top-4 right-4 z-50 transition-all duration-300 ease-out ${
@@ -277,7 +238,7 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
         <div className="space-y-3">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <h3 className="text-white font-semibold text-sm futuristic-font">AI DJ Assistant</h3>
+            <h3 className="text-white font-semibold text-sm futuristic-font">Voice Music Search</h3>
             <div className="text-xs text-gray-400 futuristic-font">
               Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-white text-[10px]">+</kbd> to close
             </div>
@@ -287,11 +248,11 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
           <div className={cn(
             "text-xs px-3 py-2 rounded-md text-center futuristic-font min-h-[32px] flex items-center justify-center",
             isListening ? "bg-green-600/30 text-green-300 border border-green-500" :
-            isSearching ? "bg-blue-600/30 text-blue-300 border border-blue-500 animate-pulse" :
+            (isProcessing || isSearching) ? "bg-blue-600/30 text-blue-300 border border-blue-500 animate-pulse" :
             "bg-gray-700/50 text-gray-300"
           )}>
-            {isSearching
-              ? 'Searching & downloading...'
+            {(isProcessing || isSearching)
+              ? status
               : liveTranscript
                 ? liveTranscript
                 : status
@@ -301,23 +262,24 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
           {/* Controls */}
           <div className="flex gap-2">
             <button
-              onClick={toggleListening}
-              disabled={isSearching}
+              onClick={isListening ? stopListening : startListening}
+              disabled={isProcessing || isSearching}
               className={cn(
                 "flex-1 py-2 px-3 rounded-md text-xs font-medium transition-all futuristic-font flex items-center justify-center gap-2",
                 isListening
                   ? "bg-green-600 hover:bg-green-700 text-white animate-pulse"
-                  : isSearching
+                  : (isProcessing || isSearching)
                   ? "bg-gray-600 text-gray-400 cursor-not-allowed"
                   : "bg-blue-600 hover:bg-blue-700 text-white"
               )}
             >
               {isListening ? <Mic size={14} /> : <MicOff size={14} />}
-              {isListening ? "Listening" : "Start"}
+              {isListening ? "Listening" : "Speak"}
             </button>
-            {isSearching && (
+            
+            {(isProcessing || isSearching) && (
               <button
-                onClick={onCancelRequest}
+                onClick={handleCancel}
                 className="py-2 px-3 rounded-md text-xs font-medium bg-red-600 hover:bg-red-700 text-white futuristic-font flex items-center justify-center gap-2"
               >
                 <X size={14} />
@@ -329,31 +291,18 @@ export const AISection: React.FC<AISectionProps> = ({ onSongRequest, onCancelReq
           {/* Last Command */}
           {lastCommand && (
             <div className="bg-gray-800/50 p-2 rounded-md">
-              <div className="text-xs text-gray-400 futuristic-font">Last command:</div>
+              <div className="text-xs text-gray-400 futuristic-font">Last request:</div>
               <div className="text-xs text-white futuristic-font">{lastCommand}</div>
             </div>
           )}
 
           {/* Instructions */}
           <div className="text-xs text-gray-500 futuristic-font space-y-1">
-            <div>Say: "Can you play "X"?"</div>
-            {isSearching && (
-              <div className="text-red-400">Press <kbd className="px-1 py-0.5 bg-gray-700 rounded text-white text-[10px]">Backspace</kbd> to cancel</div>
-            )}
+            <div>Click "Speak" and say something like:</div>
+            <div>"Play some jazz music"</div>
+            <div>"Find Bohemian Rhapsody"</div>
+            <div>"Play The Beatles"</div>
           </div>
-
-          {/* Test Button for when speech fails */}
-          {!isListening && !isSearching && (
-            <button
-              onClick={() => {
-                console.log('🧪 Testing real YouTube API...')
-                onSongRequest('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-              }}
-              className="w-full py-2 px-3 rounded-md text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white futuristic-font"
-            >
-              🧪 Test Real API
-            </button>
-          )}
         </div>
       </div>
     </div>

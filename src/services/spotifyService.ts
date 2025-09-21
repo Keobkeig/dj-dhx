@@ -111,32 +111,47 @@ class SpotifyService {
 
 // YouTube search and download service using RapidAPI
 class YouTubeDownloadService {
-  private readonly rapidApiKey = '71e68a74d9mshb0b6af94bdd0bdfp1e7ad4jsn1fc9fce486ac'
+  private readonly rapidApiKey = '378d79c991msh221febec26dadeap19f71cjsn53b2e62948a5'
   private readonly youtubeApiKey = 'AIzaSyDummy_Key_Replace_With_Real' // Placeholder - will use fallback
 
   async searchAndDownload(query: string): Promise<{ url: string; title: string; artist: string }> {
-    try {
-      // Check if the query is a direct YouTube URL
-      if (query.includes('youtube.com/watch') || query.includes('youtu.be/')) {
-        console.log('🎬 Direct YouTube URL detected:', query)
+  try {
+    // Check if the query is a direct YouTube URL
+    if (query.includes('youtube.com/watch') || query.includes('youtu.be/')) {
+      console.log('Direct YouTube URL detected:', query)
 
-        // Convert to MP3 using RapidAPI YouTube to MP3 service
+      // Try to convert to MP3 using RapidAPI YouTube to MP3 service
+      try {
         const mp3Result = await this.convertToMp3(query)
-
         return {
           url: mp3Result.downloadUrl,
           title: mp3Result.title || 'YouTube Video',
           artist: this.extractArtistFromTitle(mp3Result.title || 'Unknown Artist')
         }
-      } else {
-        // For song names, we need to return an error since we can't search
-        throw new Error('❌ This service only accepts direct YouTube URLs. Please provide a YouTube link like: https://www.youtube.com/watch?v=...')
+      } catch (conversionError) {
+        console.warn('MP3 conversion failed, using original YouTube URL:', conversionError)
+        
+        // Fallback: Return the original YouTube URL
+        const title = await this.getVideoTitle(query)
+        return {
+          url: query, // Return original YouTube URL as fallback
+          title: title,
+          artist: this.extractArtistFromTitle(title)
+        }
       }
-    } catch (error) {
-      console.error('Error in YouTube download service:', error)
+    } else {
+      throw new Error('This service only accepts direct YouTube URLs. Please provide a YouTube link.')
+    }
+  } catch (error) {
+    // Only throw if it's not a conversion error we can handle
+    if (error instanceof Error && error.message.includes('This service only accepts')) {
       throw error
     }
+    
+    console.error('Error in YouTube download service:', error)
+    throw new Error('Failed to process YouTube request')
   }
+}
 
   private async searchYouTube(query: string): Promise<Array<{ videoId: string; title: string; url: string }>> {
     try {
